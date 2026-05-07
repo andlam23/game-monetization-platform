@@ -663,16 +663,48 @@ Expected: `All is good. No failures. No warnings. No errors.`
 
 ### Step 5.5: Build your first Looker Studio dashboard
 
-Six tiles on `fct_revenue_daily`:
+Six tiles on the marts. Looker Studio has no API, so this step is hands-on; the spec below is the configuration that produced the actual dashboard.
 
-1. ARPDAU over time
-2. Retention curve (D1/D7/D30)
-3. Conversion rate
-4. Revenue by cohort
-5. Top-spending player segments
-6. Total revenue scorecard
+**Add three data sources** (Create → Data source → BigQuery → My Projects → monetization-warehouse → analytics → [table] → Connect):
 
-**Make it look polished.** Walkthrough: <https://blog.coupler.io/bigquery-to-data-studio/>
+- `analytics.fct_revenue_daily`
+- `analytics.dim_players`
+- `analytics.fct_retention_cohorts`
+
+**Tile spec**:
+
+| # | Tile | Source | Chart | Metric / formula | Filter |
+|---|------|--------|-------|------------------|--------|
+| 1 | ARPDAU over time | `fct_revenue_daily` | Time series | Calculated field `arpdau = SUM(total_revenue_usd) / COUNT_DISTINCT(user_pseudo_id)` | `is_active_today = true` |
+| 2 | Retention curve | `fct_retention_cohorts` | Line | Calculated field `weighted_retention = SUM(retained_users) / SUM(cohort_size)` | `day_offset` IN {0, 1, 7, 14, 30} |
+| 3 | Paying conversion | `dim_players` | Scorecard | `COUNT_DISTINCT(CASE WHEN is_payer THEN user_pseudo_id END) / COUNT_DISTINCT(user_pseudo_id)`, format Percent | none |
+| 4 | Revenue by cohort | `dim_players` | Column chart | `SUM(ltv_usd)` by `first_seen_date` | none |
+| 5 | Top-spending segments | `dim_players` | Bar chart | `SUM(ltv_usd)` and `COUNT_DISTINCT(user_pseudo_id)` (renamed `user_count`) by `payer_segment` | none |
+| 6 | Total revenue | `fct_revenue_daily` | Scorecard with sparkline | `SUM(total_revenue_usd)`, sparkline dimension `event_date` | none |
+
+**Polish that meaningfully changes how the dashboard reads**:
+
+- Tile 2: rename X-axis ticks `0/1/7/14/30 → D0/D1/D7/D14/D30`. Add three horizontal **reference lines** (Style → Reference line → Constant) at `0.30 / 0.10 / 0.04` for industry casual-puzzle benchmarks; set their labels to `D1 (0.3)`, `D7 (0.1)`, `D30 (0.04)`. The chart now compares your retention to industry benchmarks at a glance.
+- Tile 1 + Tile 4 + Tile 6: format metrics as **Currency (USD)** at the calculated-field / data-source level, not just at the chart level (some chart types ignore chart-level format).
+- One accent color across all tiles (Theme & Layout → Theme → Custom).
+- A small text annotation noting *"Real F2P data from GA4 Flood-It! sample (Aug-Oct 2018) + calibrated synthetic ad/IAP layers per ADR-0013"* — recruiter-readable transparency.
+
+**Looker Studio gotchas you'll hit** (encountered building the actual dashboard):
+
+- **Filter clauses default to AND, not OR.** A filter like `day_offset = 0 AND day_offset = 1 AND day_offset = 7` returns zero rows. Click the literal `AND` label between clauses to toggle to `OR`. The `In list` operator that would solve this in one clause is **only available for string fields**, not numeric — so for `day_offset` (INT64), OR-toggling between `Equal to` clauses is the path.
+- **Scorecard with dimension ≠ scorecard with comparison.** Current LS exposes three scorecard types: plain `Scorecard`, `Scorecard with compact numbers`, `Scorecard with dimension`. Use plain Scorecard for tiles 3 and 6.
+- **Default date range "Auto" silently truncates static data.** "Auto" = "Last 28 days relative to today." Against the 2018 Flood-It window that filters to ~nothing. Set every tile's Default date range to **Custom** with `2018-08-01` → `2018-10-04` explicitly.
+- **A report-level date control overrides every tile's date range.** If you add one and leave its default at the standard "Last 28 days," your scorecards quietly show a sliver of revenue (the symptom: total revenue scorecard reads `$237.74` instead of `$8,716.02`). Set the control's default to the same custom range, or remove the control entirely.
+- **Bar chart row limits live in the Style tab**, not Setup. Without bumping it, `Revenue by cohort` only shows the first ~10 cohort dates.
+- **Y-axis currency formatting on time-series.** The metric's field-level Currency type formats tooltips and data labels but is sometimes ignored by axis tick labels. Style tab → Y-axis → Number format → Currency (USD) is the override that works on the axis.
+- **Reference lines are horizontal only** (Y-axis thresholds). There's no native "vertical line at X = day_offset 7" — for that, filter the chart to the canonical offsets instead.
+- **Default sort is by metric descending.** For ordered X-axes (cohort dates, day offsets), explicitly set Sort to the dimension ascending so the curve reads left-to-right correctly.
+
+**Dashboard publishing**: Share → Public access if you want it visible on the portfolio. Add the URL to the repo README.
+
+**Live dashboard for this project**: <https://datastudio.google.com/reporting/dca0554f-5906-4c2d-8576-e5c4f922c3cb>
+
+Walkthrough (introductory, not the level of detail above): <https://blog.coupler.io/bigquery-to-data-studio/>
 
 ### Step 5.6: Push events to Amplitude
 
