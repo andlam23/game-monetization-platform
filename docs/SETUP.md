@@ -369,16 +369,59 @@ dbt debug
 
 ```sh
 uv pip install dagster dagster-webserver dagster-dbt dagster-gcp dagster-gcp-pandas
-dagster project scaffold --name monetization_orchestration
+uvx create-dagster project monetization_orchestration
 ```
+
+`dagster project scaffold` still works in 1.13.x but prints a `SupersessionWarning` — the new official scaffold is `create-dagster project`, distributed as a separate package. `uvx` runs it as a one-shot without polluting the venv.
 
 ### Step 3.4: Wire Dagster to dbt
 
-Use the `DbtProjectComponent` pattern: <https://docs.dagster.io/api/libraries/dagster-dbt>
+Use the `DbtProjectComponent` pattern with the new dg-managed scaffold from Step 3.3. From inside `monetization_orchestration/`:
 
-Run `dagster dev` — UI at <http://localhost:3000>.
+```sh
+dg scaffold defs dagster_dbt.DbtProjectComponent monetization_warehouse \
+  --project-path ../monetization_warehouse
+```
 
-End-to-end tutorial: <https://airbyte.com/tutorials/weather-data-stack-with-dbt-dagster-and-bigquery> (ignore the Airbyte parts).
+That writes `src/monetization_orchestration/defs/monetization_warehouse/defs.yaml`. The default scaffold needs two adjustments before it loads:
+
+1. The default `project` value points at the dbt project but doesn't override `profiles_dir`, so Dagster looks for `profiles.yml` inside the dbt project rather than `~/.dbt`.
+2. On Windows, the scaffolder writes a backslash in the path (`/..\monetization_warehouse`) — replace with forward slashes for portability.
+
+Working YAML:
+
+```yaml
+type: dagster_dbt.DbtProjectComponent
+
+attributes:
+  project:
+    project_dir: '{{ project_root }}/../monetization_warehouse'
+    profiles_dir: '{{ env("USERPROFILE") }}/.dbt'   # use $HOME on macOS/Linux
+```
+
+Add `dagster-dbt` (and any other `dagster-*` integrations) to `monetization_orchestration/pyproject.toml` `[project] dependencies` — `create-dagster project` only declares `dagster` itself.
+
+Install the project in editable mode so its package is importable from the venv (the new src-layout scaffold won't load without this — `dagster dev` fails with `ModuleNotFoundError: No module named 'monetization_orchestration'`):
+
+```sh
+uv pip install -e ./monetization_orchestration
+```
+
+Validate the wiring without launching the UI:
+
+```sh
+# venv must be active so dg can find the dbt CLI
+dg check defs
+```
+
+Expected output: `All component YAML validated successfully. All definitions loaded successfully.`
+
+Then `dagster dev` to launch the UI at <http://localhost:3000>. The dbt models appear as Dagster assets in the asset graph.
+
+> **PATH gotcha**: `DbtProjectComponent` shells out to `dbt`, which only resolves if the venv is activated (so `.venv/Scripts/` or `.venv/bin/` is on PATH). `dg check defs` and `dagster dev` both fail otherwise. There's no `dbt_executable` field on the component schema as of `dagster-dbt` 1.13.x.
+
+Reference: <https://docs.dagster.io/api/libraries/dagster-dbt>
+End-to-end tutorial (older `@dbt_assets` pattern, but the BigQuery wiring is still useful): <https://airbyte.com/tutorials/weather-data-stack-with-dbt-dagster-and-bigquery> (ignore the Airbyte parts).
 
 ### Step 3.5: Install Soda Core
 
