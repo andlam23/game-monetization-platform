@@ -286,14 +286,40 @@ Sign up at <https://cloud.google.com> — $300 in credits and a generous always-
 
 ### Step 2.2: Create a BigQuery service account
 
-In the GCP console: **IAM & Admin → Service Accounts → Create**.
+You can use the GCP console (**IAM & Admin → Service Accounts → Create**) or the gcloud CLI. With `gcloud auth login` already done from Step 2.1, the CLI is one-shot:
 
-- Name: `dbt-service-account`
-- Roles: `BigQuery Data Editor`, `BigQuery Job User`, `BigQuery User`
-- Generate JSON key, save **outside** your repo (`~/.gcp/dbt-creds.json`)
-- Add `*.json` to `.gitignore`
+```sh
+PROJECT_ID=monetization-warehouse
+SA_EMAIL="dbt-service-account@$PROJECT_ID.iam.gserviceaccount.com"
 
-dbt official guide with screenshots: <https://docs.getdbt.com/guides/bigquery>
+gcloud iam service-accounts create dbt-service-account \
+  --display-name="dbt service account" \
+  --description="Used by dbt-bigquery to materialize models" \
+  --project="$PROJECT_ID"
+
+for role in roles/bigquery.dataEditor roles/bigquery.jobUser roles/bigquery.user; do
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:$SA_EMAIL" --role="$role" --condition=None --quiet
+done
+
+mkdir -p ~/.gcp
+gcloud iam service-accounts keys create ~/.gcp/dbt-creds.json \
+  --iam-account="$SA_EMAIL" --project="$PROJECT_ID"
+```
+
+The three roles match dbt's official BigQuery setup guide: <https://docs.getdbt.com/guides/bigquery>.
+
+**`.gitignore` patterns** (defensive — the real key lives outside the repo):
+
+```gitignore
+# GCP / service account credentials
+**/*-creds.json
+**/credentials*.json
+**/service-account*.json
+.gcp/
+```
+
+> **Why not blanket `*.json`?** A blanket rule would also block legitimate JSON config the project will eventually want to track (Claude Code project settings, dbt-generated artifacts, tsconfig if a frontend is added). Targeted credential-shaped patterns satisfy the leak-prevention intent without that collateral. ADR-0011 has the full reasoning.
 
 > **📝 Decision-time doc:** Step 2.2 establishes your service-account permission model. Write **ADR-0011** — *"BigQuery service account permission scope"* — in the same commit, with what you granted and your least-privilege rationale.
 
@@ -303,6 +329,19 @@ Two datasets:
 
 - `raw` — landing data
 - `analytics` — dbt outputs
+
+Both are created by `scripts/gcp/setup-bigquery.sh` from Step 2.1; this step is already done if you ran that script. Verify with:
+
+```sh
+bq --project_id=monetization-warehouse ls
+```
+
+To create manually instead:
+
+```sh
+bq --project_id=monetization-warehouse --location=US mk -d raw
+bq --project_id=monetization-warehouse --location=US mk -d analytics
+```
 
 ---
 
