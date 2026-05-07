@@ -19,3 +19,4 @@ ADRs 0001–0010 are the **initial set** — every architectural decision made d
 | 0009 | [Cloud Warehouse](0009-cloud-warehouse.md) | accepted | 2026-05-06 |
 | 0010 | [Documentation Methodology](0010-documentation-methodology.md) | accepted | 2026-05-06 |
 | 0011 | [BigQuery Service Account Permission Scope](0011-bigquery-service-account-permission-scope.md) | accepted | 2026-05-06 |
+| 0012 | [dbt Project Structure — staging / intermediate / marts](0012-dbt-project-structure.md) | accepted | 2026-05-07 |
