@@ -492,7 +492,7 @@ Reference: <https://docs.sentry.io/platforms/python/>
 
 **Decision** (per ADR-0013): hybrid — Flood-It as the real-data backbone, synthetic ad-revenue layer for the dimension public data doesn't cover.
 
-**Real backbone — GA4 Flood-It! sample.** Real F2P puzzle game events, 2018-08 → 2018-12, hundreds of millions of rows already public in BigQuery at `firebase-public-project.analytics_153293282.events_*`. CC-BY 4.0. Read in place via a dbt source declaration — *not* copied into our `raw` dataset:
+**Real backbone — GA4 Flood-It! sample.** Real F2P puzzle game events. 114 daily-sharded tables, of which the populated portion is **2018-08-01 → 2018-10-03** (~64 days, ~3.2M events; the later tables exist but are empty). Public in BigQuery at `firebase-public-project.analytics_153293282.events_*`. CC-BY 4.0. Read in place via a dbt source declaration — *not* copied into our `raw` dataset:
 
 ```yaml
 # monetization_warehouse/models/staging/floodit/_floodit__sources.yml
@@ -521,11 +521,11 @@ Why this hybrid and not pure-real or pure-synthetic: see ADR-0013. Recruiter sca
 
 ### Step 5.2: Build the synthetic data generators (ad + IAP)
 
-Per ADR-0013, two synthetic layers are needed because Flood-It alone provides neither ad-revenue events at row level (don't exist publicly) nor enough IAP events to be analytically useful (only 17 across 5 months — discovered when starting Step 5.3). Both layers follow the same pattern: Python generator → Parquet → `bq load` to `raw.synthetic_*_events`.
+Per ADR-0013, two synthetic layers are needed because Flood-It alone provides neither ad-revenue events at row level (don't exist publicly) nor enough IAP events to be analytically useful (only 17 across the populated 64-day window — discovered when starting Step 5.3). Both layers follow the same pattern: Python generator → Parquet → `bq load` to `raw.synthetic_*_events`.
 
 **Ad-revenue generator** at `scripts/data/generate_synthetic_ad_events.py`:
 
-**Where it lives**: `scripts/data/generate_synthetic_ad_events.py`. CLI-driven (`uv run python scripts/data/generate_synthetic_ad_events.py --start 2018-08-01 --end 2018-12-31 --out data/synthetic_ad_events.parquet`).
+**Where it lives**: `scripts/data/generate_synthetic_ad_events.py`. CLI-driven (`uv run python scripts/data/generate_synthetic_ad_events.py --start 2018-08-01 --end 2018-10-03 --out data/synthetic_ad_events.parquet`). The end date matches Flood-It's actual last populated day; passing a later date works but scans empty tables.
 
 **What it generates** — three event types, one row per event:
 
@@ -577,7 +577,7 @@ Generate + load:
 
 ```sh
 uv run python scripts/data/generate_synthetic_iap_events.py \
-  --start 2018-08-01 --end 2018-12-31 --seed 42 \
+  --start 2018-08-01 --end 2018-10-03 --seed 42 \
   --out data/synthetic_iap_events.parquet
 
 bq --project_id=monetization-warehouse load \
@@ -637,7 +637,29 @@ Expected: 3 staging views + 3 mart tables, all PASS. Then per-mart tests in `_<d
 
 ### Step 5.4: Wire up Soda checks
 
-Define checks in `soda/checks.yml` for freshness, row counts, null rates on the marts. Schedule via Dagster sensor.
+Per ADR-0005, Soda is the second of three data-quality layers (above dbt tests, below Dagster anomaly sensors). Define checks in `soda/checks.yml` covering freshness, row-count SLAs, null rates, and distributional assertions tied to ADR-0013's calibration targets (paying-conversion ~3%, whale revenue share 60-85%).
+
+**Check categories implemented**:
+
+- **Structural** — `row_count > 0`, `missing_count(...) = 0`, `duplicate_count(...) = 0` for composite keys, fail conditions that catch leakage (e.g., `is_synthetic = false` rows in synthetic tables)
+- **Freshness / coverage** — date range assertions on `fct_revenue_daily` (`min(event_date)` and `max(event_date)` against the populated Flood-It window)
+- **Distributional / calibration** — `fail query` blocks asserting paying-conversion stays in 2-5% and whale revenue share stays in 60-85%; if these drift, either the synthetic generator parameters need re-tuning or downstream models compute things differently
+
+**SodaCL syntax gotchas** (Windows + BigQuery):
+
+- Date literals don't work as bare check expressions (`max(event_date) >= 2018-12-25`). Use a `failed rows` block with a `fail query` instead and quote the dates in the SQL.
+- BigQuery's aggregation function is `countif`, not `count_if`. Soda passes the SQL through verbatim.
+- Multiple `checks for <table>:` blocks for the same table fail YAML duplicate-key parsing — consolidate per-table.
+
+**Verify**:
+
+```sh
+soda scan -d monetization_warehouse -c soda/configuration.yml soda/checks.yml
+```
+
+Expected: `All is good. No failures. No warnings. No errors.`
+
+**Schedule via Dagster.** A `soda_quality_scan` asset + `soda_quality_job` + `soda_quality_daily` schedule live at `monetization_orchestration/src/monetization_orchestration/defs/soda_quality.py`. The asset uses Soda's Python `Scan` API directly (not a CLI subprocess) and walks up the directory tree to find `soda/configuration.yml` regardless of the running cwd. Cron is `0 6 * * *` (daily at 06:00 UTC).
 
 ### Step 5.5: Build your first Looker Studio dashboard
 

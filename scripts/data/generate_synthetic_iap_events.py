@@ -6,9 +6,10 @@ the canonical 80/20 whale concentration, writes Parquet ready for `bq load`
 into `raw.synthetic_iap_events`.
 
 Why a synthetic IAP layer in addition to the ad layer:
-  Flood-It contains only 17 `in_app_purchase` events across 5 months — far
-  too sparse to compute ARPPU, LTV, conversion rate, or whale concentration
-  honestly. ADR-0013 amendment captures the discovery and scope change.
+  Flood-It contains only 17 `in_app_purchase` events across the populated
+  64-day window — far too sparse to compute ARPPU, LTV, conversion rate,
+  or whale concentration honestly. ADR-0013 amendment captures the
+  discovery and scope change.
 
 Calibration anchors (rough, casual-puzzle genre; cite in any analyst writeup):
   - ~3% paying conversion rate (GameAnalytics State of Mobile benchmarks)
@@ -27,7 +28,7 @@ refresh these monthly. Reproducible: same --seed produces the same output.
 
 Usage:
     uv run python scripts/data/generate_synthetic_iap_events.py \\
-        --start 2018-08-01 --end 2018-12-31 \\
+        --start 2018-08-01 --end 2018-10-03 \\
         --out data/synthetic_iap_events.parquet \\
         --seed 42
 """

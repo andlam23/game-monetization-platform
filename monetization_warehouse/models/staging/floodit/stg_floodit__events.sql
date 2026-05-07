@@ -12,9 +12,11 @@
 -- staging model. `floodit` source declared in _floodit__sources.yml.
 --
 -- Cross-project query cost discipline: filter on _TABLE_SUFFIX so we
--- don't scan the full 114-day history on every refresh in dev. The
--- range below covers the entire window the synthetic layers were
--- generated against (2018-08-01 to 2018-12-31).
+-- don't scan tables outside our window on every refresh. The actual
+-- populated data ends 2018-10-03 (later daily-sharded tables exist but
+-- are empty); the filter is set wider to '20181231' as a defensive
+-- guard in case Flood-It is ever extended — costs nothing because
+-- empty tables don't contribute bytes scanned.
 
 with source as (
     select

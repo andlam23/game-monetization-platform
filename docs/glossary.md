@@ -13,7 +13,7 @@
 **First defined**: 2026-05-07
 
 ## LTV
-**Definition**: Lifetime Value. Total cumulative revenue (ad + IAP) attributed to a single user across the data window. Time horizon for this project is the full Flood-It window (2018-08-01 → 2018-12-31, ~5 months) — *not* a forecast and *not* truncated to D7/D30/D90/D365 the way LTV is sometimes reported in production. Switch to a windowed/forecasted variant when joining to acquisition cost data for ROAS analysis.
+**Definition**: Lifetime Value. Total cumulative revenue (ad + IAP) attributed to a single user across the data window. Time horizon for this project is the actual Flood-It data range (2018-08-01 → 2018-10-03, ~64 days; daily-sharded tables exist through 2018-12-31 but the late ones are empty) — *not* a forecast and *not* truncated to D7/D30/D90/D365 the way LTV is sometimes reported in production. Switch to a windowed/forecasted variant when joining to acquisition cost data for ROAS analysis.
 **Formula**: `SUM(total_revenue_usd)` per `user_pseudo_id` across the entire data window. Materialized as `dim_players.ltv_usd`.
 **Source of truth**: `monetization-warehouse:analytics.dim_players` (`ltv_usd` column)
 **First defined**: 2026-05-07

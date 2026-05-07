@@ -1,17 +1,115 @@
-# Soda Core checks — intentionally empty.
+# Soda Core checks — second layer of the three-layer data-quality stack
+# defined in ADR-0005. Layered above dbt tests (which handle structural
+# checks: uniqueness, not_null, accepted_values, relationships) and below
+# Dagster sensors (which handle anomaly detection on rolling baselines).
 #
-# Per SETUP.md Step 3.5: don't define checks for tables that don't exist yet.
-# The only table currently materialized is `analytics.my_first_dbt_model`,
-# which is dbt-scaffold boilerplate that will be replaced as soon as we
-# write real models against real monetization data.
+# Notes on this project's specific data shape:
+#   * Flood-It is a static GA4 dump. Daily-sharded tables exist through
+#     2018-12-31, but actual event data ends 2018-10-03 (the late tables
+#     are empty). "Freshness" checks pin against 2018-10-01 instead of
+#     NOW() - 24h. In production these would be parameterized to a
+#     current-data SLA.
+#   * Synthetic ad and IAP volumes were calibrated by the generators in
+#     scripts/data/; the row-count and distributional checks assert the
+#     calibration is still landing where ADR-0013 says it should.
 #
-# Add checks here once a real fact/dim table lands. Per the data-quality
-# layering in ADR-0005:
-#   - dbt tests       — in-warehouse structural checks (uniqueness, not_null,
-#                       relationships, accepted_values)
-#   - Soda checks     — cross-source freshness, SLA contracts, distributional
-#                       assertions ("yesterday's revenue must be within 50%
-#                       of trailing-7-day average", etc.)
-#   - Dagster sensors — domain-specific anomaly detection
-#
-# Reference: https://docs.soda.io/soda-core/overview-main.html
+# Reference: https://docs.soda.io/soda-cl/soda-cl-overview.html
+
+
+# --- raw layer ----------------------------------------------------------------
+
+checks for raw.synthetic_ad_events:
+  - row_count > 0:
+      name: ad events not empty
+  - row_count between 200000 and 400000:
+      name: ad-event row count matches generator calibration
+  - missing_count(user_pseudo_id) = 0:
+      name: every ad event keyed to a user
+  - missing_count(event_timestamp_us) = 0:
+      name: every ad event has a timestamp
+  - failed rows:
+      name: no real-data rows leaked into the synthetic table
+      fail condition: is_synthetic = false
+
+checks for raw.synthetic_iap_events:
+  - row_count > 0:
+      name: iap events not empty
+  - row_count between 800 and 2000:
+      name: iap row count matches generator calibration
+  - missing_count(user_pseudo_id) = 0:
+      name: every purchase keyed to a user
+  - missing_count(price_usd) = 0:
+      name: every purchase has a price
+  - failed rows:
+      name: prices are within the documented ladder
+      fail condition: price_usd not in (0.99, 2.99, 4.99, 9.99, 19.99, 49.99, 99.99)
+  - failed rows:
+      name: payer_segment uses the documented vocabulary
+      fail condition: payer_segment not in ('whale', 'dolphin', 'minnow')
+  - failed rows:
+      name: whale revenue share stays in 60-85% (ADR-0013 calibration)
+      fail query: |
+        select
+          sum(if(payer_segment = 'whale', price_usd, 0))
+            / nullif(sum(price_usd), 0) as whale_share
+        from raw.synthetic_iap_events
+        having whale_share not between 0.60 and 0.85
+
+
+# --- analytics layer (marts) --------------------------------------------------
+
+checks for analytics.fct_revenue_daily:
+  - row_count > 0:
+      name: fct_revenue_daily not empty
+  - row_count between 30000 and 50000:
+      name: fct_revenue_daily row count is in expected range
+  - missing_count(user_pseudo_id) = 0:
+      name: every row has a user
+  - missing_count(event_date) = 0:
+      name: every row has a date
+  - duplicate_count(event_date, user_pseudo_id) = 0:
+      name: composite key is unique (date, user)
+  - failed rows:
+      name: revenue components are non-negative
+      fail condition: ad_revenue_usd < 0 or iap_revenue_usd < 0 or total_revenue_usd < 0
+  - failed rows:
+      name: data covers the full Flood-It window (Aug 1 - Oct 3, 2018)
+      fail query: |
+        select max(event_date) as max_d, min(event_date) as min_d
+        from analytics.fct_revenue_daily
+        having max(event_date) < '2018-10-01'
+            or min(event_date) > '2018-08-05'
+
+checks for analytics.dim_players:
+  - row_count > 0:
+      name: dim_players not empty
+  - row_count between 8000 and 12000:
+      name: distinct user count is in expected range
+  - duplicate_count(user_pseudo_id) = 0:
+      name: one row per user
+  - missing_count(payer_segment) = 0:
+      name: every user has a segment label
+  - failed rows:
+      name: payer_segment uses the documented vocabulary
+      fail condition: payer_segment not in ('whale', 'dolphin', 'minnow', 'non_payer')
+  - failed rows:
+      name: is_payer flag matches first_purchase_date presence
+      fail condition: (is_payer = true and first_purchase_date is null) or (is_payer = false and first_purchase_date is not null)
+  - failed rows:
+      name: paying conversion rate stays near 3% (ADR-0013 calibration)
+      fail query: |
+        select countif(is_payer) / count(*) as conversion_rate
+        from analytics.dim_players
+        having conversion_rate not between 0.02 and 0.05
+
+checks for analytics.fct_retention_cohorts:
+  - row_count > 0:
+      name: fct_retention_cohorts not empty
+  - missing_count(retention_rate) = 0:
+      name: every row has a retention rate
+  - failed rows:
+      name: retention_rate stays in [0, 1]
+      fail condition: retention_rate < 0 or retention_rate > 1
+  - failed rows:
+      name: day_offset 0 retention is always 100%
+      fail condition: day_offset = 0 and retention_rate < 0.999
