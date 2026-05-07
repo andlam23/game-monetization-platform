@@ -1,0 +1,28 @@
+version: 2
+
+models:
+  - name: fct_revenue_daily
+    description: >
+      Per-day-per-player revenue and activity. Grain: (event_date,
+      user_pseudo_id). Source of truth for ARPDAU — see docs/glossary.md.
+    columns:
+      - name: event_date
+        description: Calendar date of the activity (UTC).
+        tests:
+          - not_null
+      - name: user_pseudo_id
+        description: Stable per-install pseudo identifier from Flood-It.
+        tests:
+          - not_null
+      - name: total_revenue_usd
+        description: Sum of ad_revenue_usd + iap_revenue_usd for this user-day.
+        tests:
+          - not_null
+      - name: is_active_today
+        description: True if the user had at least one Flood-It event that day.
+        tests:
+          - not_null
+      - name: is_paying_today
+        description: True if the user made at least one IAP that day.
+        tests:
+          - not_null

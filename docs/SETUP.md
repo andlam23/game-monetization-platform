@@ -590,18 +590,50 @@ Sanity-check the loaded data should show whale-revenue concentration in the 60-8
 
 ### Step 5.3: Build the dbt model layer
 
-Three layers:
+**Project-level config first.** Configure per-layer materialization in `monetization_warehouse/dbt_project.yml` per ADR-0012, and delete the default `models/example/` folder that `dbt init` scaffolded:
 
-- `stg_events` — cleans raw events (Flood-It events + synthetic ad events as separate staging models)
-- `fct_revenue_daily` — per-day-per-player revenue (IAP + ad)
-- `dim_players` — lifetime stats per player
-
-```sh
-dbt run
-dbt test
+```yaml
+models:
+  monetization_warehouse:
+    staging:      { +materialized: view }
+    intermediate: { +materialized: view }
+    marts:        { +materialized: table }
 ```
 
-> **📝 Glossary discipline:** For every metric encoded in `fct_*` and `dim_*`, **fill in the corresponding glossary entry** before the model's SQL is committed. ARPDAU, DAU, LTV, retention buckets — every one. Glossary entry and SQL ship in the same commit.
+```sh
+rm -rf monetization_warehouse/models/example
+```
+
+**Source declarations.** One YAML per source under `models/staging/<source>/`:
+
+- `staging/floodit/_floodit__sources.yml` (already added in Step 5.1)
+- `staging/synthetic_ads/_synthetic_ads__sources.yml`
+- `staging/synthetic_iap/_synthetic_iap__sources.yml`
+
+**Staging models — one per source per ADR-0012.** 1:1 source mirrors with light cleaning (column renames, type casts, `event_params` extraction); no business logic.
+
+- `stg_floodit__events.sql` — staging from `firebase-public-project.analytics_153293282.events_*`. Filters on `_TABLE_SUFFIX` to avoid scanning the full 114-day history.
+- `stg_synthetic_ads__events.sql` — staging from `raw.synthetic_ad_events`.
+- `stg_synthetic_iap__events.sql` — staging from `raw.synthetic_iap_events`.
+
+**Marts.** Three tables consumed by the dashboard and downstream analyses.
+
+- `marts/finance/fct_revenue_daily.sql` — grain `(event_date, user_pseudo_id)`. Combines Flood-It activity (gameplay → DAU) with synthetic ad revenue and synthetic IAP revenue. UNIONs user-keys across the three sources so a row exists for any user-day with *any* signal. Day-partitioned, clustered on `user_pseudo_id`. Source of truth for **ARPDAU**.
+- `marts/product/dim_players.sql` — grain `user_pseudo_id` (unique). Lifetime stats: LTV, total IAP revenue, total ad revenue, first/last seen, days active, payer segment (whale/dolphin/minnow/non_payer). Source of truth for **ARPPU**, **LTV**, **conversion rate**, **whale concentration**.
+- `marts/product/fct_retention_cohorts.sql` — grain `(cohort_date, day_offset)`. Pre-aggregated cohort retention curve at offsets 0..30. Right-censored: rows where `cohort_date + day_offset` exceeds the latest available date are omitted. Source of truth for **D1 / D7 / D30 retention**.
+
+**Build and test:**
+
+```sh
+cd monetization_warehouse
+dbt build
+```
+
+Expected: 3 staging views + 3 mart tables, all PASS. Then per-mart tests in `_<domain>__models.yml` files (uniqueness on `dim_players.user_pseudo_id`, `accepted_values` on `payer_segment`, `not_null` across key columns).
+
+> **📝 Glossary discipline:** For every metric encoded in `fct_*` and `dim_*`, **fill in the corresponding glossary entry** before the model's SQL is committed. ARPDAU, ARPPU, LTV, D1/D7/D30 retention, conversion rate, whale concentration — six entries, all live in `docs/glossary.md`. Glossary entry and SQL ship in the same commit.
+
+> **⚠️ IAP gap warning.** When you query Flood-It's `event_name` distribution while building staging models, you'll find only 17 `in_app_purchase` events across 5 months — too sparse for honest IAP analytics. If you discover this *before* Step 5.2, build the synthetic IAP generator alongside the synthetic ad generator. If you discover it *during* Step 5.3 (this is what happened during the original build), pause to amend ADR-0013, build the IAP generator (`scripts/data/generate_synthetic_iap_events.py`), load to `raw.synthetic_iap_events`, then add `staging/synthetic_iap/` and resume.
 
 ### Step 5.4: Wire up Soda checks
 

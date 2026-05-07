@@ -1,0 +1,52 @@
+version: 2
+
+models:
+  - name: dim_players
+    description: >
+      Lifetime stats per player (LTV, payer status, cohort). One row per
+      user_pseudo_id. Source of truth for ARPPU, LTV, conversion rate, and
+      whale concentration metrics — see docs/glossary.md.
+    columns:
+      - name: user_pseudo_id
+        description: Stable per-install pseudo identifier from Flood-It.
+        tests:
+          - unique
+          - not_null
+      - name: ltv_usd
+        description: Lifetime revenue (ad + IAP) for the data window.
+        tests:
+          - not_null
+      - name: is_payer
+        description: True if the user has at least one IAP purchase.
+        tests:
+          - not_null
+      - name: payer_segment
+        description: Percentile-based cohort label (top 10% / next 30% / bottom 60%) plus non_payer.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['whale', 'dolphin', 'minnow', 'non_payer']
+
+  - name: fct_retention_cohorts
+    description: >
+      Cohort retention curves. Grain: (cohort_date, day_offset). One row
+      per cohort × day-offset combination with cohort_size, retained_users,
+      retention_rate. Source of truth for D1 / D7 / D30 retention metrics —
+      see docs/glossary.md.
+    columns:
+      - name: cohort_date
+        description: Date the user's first session occurred (UTC). All users in this cohort share this date.
+        tests:
+          - not_null
+      - name: day_offset
+        description: Integer days after cohort_date. 0 = install day; 1 = D1 retention; 7 = D7; 30 = D30.
+        tests:
+          - not_null
+      - name: cohort_size
+        description: Distinct user count in the cohort. Same value across all day_offsets for a given cohort_date.
+        tests:
+          - not_null
+      - name: retention_rate
+        description: retained_users / cohort_size, in [0, 1]. Always 1.0 at day_offset=0.
+        tests:
+          - not_null
