@@ -7,12 +7,11 @@ dependencies = [
     "dagster-dbt",
     "dagster-gcp",
     "dagster-gcp-pandas",
-]
-
-[dependency-groups]
-dev = [
-    "dagster-dg-cli",
+    # webserver + dg-cli are runtime deps for `dagster dev` and `dg check defs`,
+    # not dev-only — promoted from create-dagster's default dev group so a fresh
+    # `uv sync` brings them in.
     "dagster-webserver",
+    "dagster-dg-cli",
 ]
 
 [build-system]

@@ -1,0 +1,17 @@
+# Soda Core checks — intentionally empty.
+#
+# Per SETUP.md Step 3.5: don't define checks for tables that don't exist yet.
+# The only table currently materialized is `analytics.my_first_dbt_model`,
+# which is dbt-scaffold boilerplate that will be replaced as soon as we
+# write real models against real monetization data.
+#
+# Add checks here once a real fact/dim table lands. Per the data-quality
+# layering in ADR-0005:
+#   - dbt tests       — in-warehouse structural checks (uniqueness, not_null,
+#                       relationships, accepted_values)
+#   - Soda checks     — cross-source freshness, SLA contracts, distributional
+#                       assertions ("yesterday's revenue must be within 50%
+#                       of trailing-7-day average", etc.)
+#   - Dagster sensors — domain-specific anomaly detection
+#
+# Reference: https://docs.soda.io/soda-core/overview-main.html

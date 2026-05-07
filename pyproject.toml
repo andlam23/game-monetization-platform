@@ -1,7 +1,23 @@
 [project]
 name = "game-monetization-platform"
 version = "0.1.0"
-description = "Add your description here"
+description = "AI-assisted game monetization data platform — BigQuery warehouse, dbt transformations, Dagster orchestration, Soda data quality."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    # Warehouse + transformations
+    "dbt-bigquery>=1.11",
+    "google-cloud-bigquery-storage>=2.30",  # faster reads for Soda / Dagster / notebooks; eliminates the BigQuery client warning
+
+    # Data quality (per ADR-0005 — Soda layer)
+    "soda-core-bigquery>=3.5",
+
+    # Orchestration project — installed editable so dagster dev can import
+    # the package; its own dependencies (dagster, dagster-dbt, dagster-gcp,
+    # dagster-gcp-pandas, dagster-webserver, dagster-dg-cli) are pulled in
+    # transitively from monetization_orchestration/pyproject.toml.
+    "monetization-orchestration",
+]
+
+[tool.uv.sources]
+monetization-orchestration = { path = "monetization_orchestration", editable = true }

@@ -1,0 +1,10 @@
+# Soda Core configuration — BigQuery data source for the monetization warehouse.
+# Reuses the same service account key dbt uses (~/.gcp/dbt-creds.json) per ADR-0011.
+# The path expansion uses ${USERPROFILE} on Windows; use ${HOME} on macOS/Linux.
+
+data_source monetization_warehouse:
+  type: bigquery
+  account_info_json_path: ${USERPROFILE}/.gcp/dbt-creds.json
+  project_id: monetization-warehouse
+  dataset: analytics
+  location: US

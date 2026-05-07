@@ -347,6 +347,14 @@ bq --project_id=monetization-warehouse --location=US mk -d analytics
 
 ## Phase 3 — Data engineering stack (~90 minutes)
 
+> **Fresh-clone shortcut.** Every Python dependency in this phase is declared in the root `pyproject.toml` (`dbt-bigquery`, `soda-core-bigquery`, `google-cloud-bigquery-storage`) plus the editable path dependency on `monetization_orchestration/`, which transitively pulls in `dagster`, `dagster-dbt`, `dagster-gcp`, `dagster-gcp-pandas`, `dagster-webserver`, and `dagster-dg-cli`. From a fresh clone:
+>
+> ```sh
+> uv sync
+> ```
+>
+> The per-step `uv pip install ...` commands below still work — they're left in place to make each tool's purpose explicit. After running them ad-hoc, run `uv sync` once at the end to reconcile the lockfile.
+
 ### Step 3.1: Install dbt-core with BigQuery adapter
 
 ```sh
@@ -401,11 +409,13 @@ attributes:
 
 Add `dagster-dbt` (and any other `dagster-*` integrations) to `monetization_orchestration/pyproject.toml` `[project] dependencies` — `create-dagster project` only declares `dagster` itself.
 
-Install the project in editable mode so its package is importable from the venv (the new src-layout scaffold won't load without this — `dagster dev` fails with `ModuleNotFoundError: No module named 'monetization_orchestration'`):
+Install the project in editable mode so its package is importable from the venv (the new src-layout scaffold won't load without this — `dagster dev` fails with `ModuleNotFoundError: No module named 'monetization_orchestration'`). If you used the Phase 3 `uv sync` shortcut, this is already done via the path-source declaration in the root `pyproject.toml`. Otherwise:
 
 ```sh
 uv pip install -e ./monetization_orchestration
 ```
+
+Note also: `create-dagster project` puts `dagster-webserver` and `dagster-dg-cli` in `[dependency-groups] dev` by default. Both are runtime requirements for `dagster dev` and `dg check defs`, so promote them to main `[project] dependencies` in `monetization_orchestration/pyproject.toml`.
 
 Validate the wiring without launching the UI:
 
@@ -426,10 +436,18 @@ End-to-end tutorial (older `@dbt_assets` pattern, but the BigQuery wiring is sti
 ### Step 3.5: Install Soda Core
 
 ```sh
-uv pip install soda-core-bigquery
+uv pip install soda-core-bigquery google-cloud-bigquery-storage
 ```
 
-Create `soda/configuration.yml` and `soda/checks.yml`. Don't define checks for tables that don't exist yet.
+`google-cloud-bigquery-storage` isn't strictly required, but installing it (a) silences a "Cannot create BigQuery Storage client" warning Soda prints, and (b) gives a faster read path to any consumer that pulls result sets back to Python (Soda distributional checks, Dagster sensors materializing into pandas, ad-hoc analyst notebooks). Free under the BigQuery tier — billing is per bytes processed by the query, which is unchanged.
+
+Create `soda/configuration.yml` (data source pointing at BigQuery, reusing the dbt service account key) and `soda/checks.yml` (intentionally empty for now — don't define checks for tables that don't exist yet). Per ADR-0005, Soda is the "cross-source freshness, SLA contracts, distributional assertions" layer; structural checks belong in dbt tests, anomaly detection in Dagster sensors.
+
+Verify the connection:
+
+```sh
+soda test-connection -d monetization_warehouse -c soda/configuration.yml
+```
 
 Reference: <https://docs.soda.io/soda-core/overview-main.html>
 
