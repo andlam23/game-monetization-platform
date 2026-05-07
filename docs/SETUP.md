@@ -177,13 +177,34 @@ After install, run `claude doctor` to verify, then `claude` to authenticate. You
 
 ### Step 1.2: Install gstack (full)
 
+**Prerequisite: bun.** gstack's `./setup` script compiles its browser binary with [bun](https://bun.sh) and exits if `bun` isn't on PATH. Install it with the gstack-recommended verified flow:
+
+```sh
+BUN_VERSION="1.3.10"
+tmpfile=$(mktemp)
+curl -fsSL "https://bun.sh/install" -o "$tmpfile"
+# verify checksum before running:
+shasum -a 256 "$tmpfile"
+BUN_VERSION="$BUN_VERSION" bash "$tmpfile" && rm "$tmpfile"
+```
+
+bun installs to `~/.bun/bin`. On Windows, also add `C:\Users\<you>\.bun\bin` to your User `PATH` so it survives shell restarts (PowerShell):
+
+```powershell
+[Environment]::SetEnvironmentVariable('Path', "$([Environment]::GetEnvironmentVariable('Path','User'));C:\Users\<you>\.bun\bin", 'User')
+```
+
+Verify with `bun --version`. Note the installer ignores `BUN_VERSION` in current builds and pulls the latest stable — fine for setup; pin via the GitHub releases page if you need a specific version.
+
+**Then install gstack:**
+
 ```sh
 git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack \
   && cd ~/.claude/skills/gstack \
   && ./setup
 ```
 
-The setup script auto-detects your agent hosts. Repo: <https://github.com/garrytan/gstack>
+The setup script auto-detects your agent hosts (Claude Code, Codex, Factory, OpenCode), compiles the `browse` binary, and registers ~45 skills. Repo: <https://github.com/garrytan/gstack>
 
 ### Step 1.3: Install claude-mem
 
@@ -191,7 +212,33 @@ The setup script auto-detects your agent hosts. Repo: <https://github.com/garryt
 npx claude-mem install
 ```
 
+After installing, **start the worker** (autostart is skipped when the install runs from a non-TTY context like a Claude Code subshell):
+
+```sh
+npx claude-mem start
+```
+
 Verify it's running by checking <http://localhost:37777>. Repo: <https://github.com/thedotmack/claude-mem>
+
+**If `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` is set in `~/.claude/settings.json` env block, remove it** — otherwise the plugin's hooks stay dormant and no observations get captured.
+
+**Windows-only workaround for the in-session search MCP**: claude-mem's plugin manifest spawns its mcp-search server via `sh -c '... node "$CLAUDE_PLUGIN_ROOT/scripts/mcp-server.cjs"'`. On Windows, Claude Code doesn't set `CLAUDE_PLUGIN_ROOT` (or `PLUGIN_ROOT`) when spawning plugin MCPs, so Git Bash mangles the unset path to `C:\Program Files\Git\scripts\mcp-server.cjs` and the server fails with `MODULE_NOT_FOUND`. Fix by patching the cached `.mcp.json` to use a direct absolute path:
+
+```
+C:\Users\<you>\.claude\plugins\cache\thedotmack\claude-mem\<VERSION>\.mcp.json
+```
+
+Replace its `mcpServers.mcp-search` entry with:
+
+```json
+{
+  "type": "stdio",
+  "command": "node",
+  "args": ["C:\\Users\\<you>\\.claude\\plugins\\cache\\thedotmack\\claude-mem\\<VERSION>\\scripts\\mcp-server.cjs"]
+}
+```
+
+The auto-memory pipeline (hooks → worker → DB → Chroma) does **not** depend on this MCP and works without it; only the in-session `mem-search` skill breaks. **Reapply this patch after every claude-mem upgrade** (the path includes the version number). Upstream bug worth filing against `thedotmack/claude-mem`.
 
 ### Step 1.4: Install nimrodfisher data-analytics-skills
 
