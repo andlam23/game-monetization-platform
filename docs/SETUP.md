@@ -527,9 +527,11 @@ Per ADR-0013, ad-revenue events don't exist in Flood-It and no public dataset ha
 
 **What it generates** — three event types, one row per event:
 
-- `ad_request` — emitted on a per-session cadence (sessions are joined from Flood-It's `user_pseudo_id` + `ga_session_id` keys). Fields: `event_timestamp`, `user_pseudo_id`, `ga_session_id`, `ad_unit`, `placement` (interstitial / rewarded / banner), `country`.
+- `ad_request` — emitted on a per-session cadence. Fields: `event_timestamp`, `user_pseudo_id`, `ga_session_id`, `ad_unit`, `placement` (interstitial / rewarded / banner), `country`.
 - `ad_impression` — emitted only when the ad request fills, governed by region- and placement-aware fill rates. Same key fields plus `ad_network`, `eCPM_usd`.
 - `ad_revenue` — derived from impression × eCPM / 1000. Same key fields plus `revenue_usd`.
+
+> **Flood-It schema quirk**: Flood-It is pre-GA4 (Firebase Analytics, 2018) — `event_params` does not contain `ga_session_id`. The generator approximates a session as one `user_pseudo_id` × one `event_date`, then synthesizes a deterministic 64-bit session ID from `(user_pseudo_id, event_date)` so downstream joins are stable. For ARPDAU and per-day metrics the user-day grain is the right one anyway.
 
 Every row carries `is_synthetic = TRUE`. Tables are prefixed `synthetic_` so the boundary is visible in any downstream `ref()`.
 

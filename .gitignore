@@ -197,3 +197,7 @@ cython_debug/
 **/dbt_packages/
 **/logs/
 **/.user.yml
+
+# Synthetic-data outputs — regenerable from scripts/data/, not source.
+# Leading slash anchors to repo root so scripts/data/ (the generator code) stays tracked.
+/data/

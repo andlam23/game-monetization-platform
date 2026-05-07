@@ -827,8 +827,10 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "dbt-bigquery" },
+    { name = "google-cloud-bigquery" },
     { name = "google-cloud-bigquery-storage" },
     { name = "monetization-orchestration" },
+    { name = "pyarrow" },
     { name = "python-dotenv" },
     { name = "sentry-sdk" },
     { name = "soda-core-bigquery" },
@@ -837,8 +839,10 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "dbt-bigquery", specifier = ">=1.11" },
+    { name = "google-cloud-bigquery", specifier = ">=3.20" },
     { name = "google-cloud-bigquery-storage", specifier = ">=2.30" },
     { name = "monetization-orchestration", editable = "monetization_orchestration" },
+    { name = "pyarrow", specifier = ">=15.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "sentry-sdk", specifier = ">=2.0" },
     { name = "soda-core-bigquery", specifier = ">=3.5" },
