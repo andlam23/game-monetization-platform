@@ -490,17 +490,34 @@ Reference: <https://docs.sentry.io/platforms/python/>
 
 ### Step 5.1: Acquire data
 
-**Real F2P data (preferred).** Uken Games' 2015 SFU case-study dataset — players, demographics, actions, revenue, retention. <http://people.stat.sfu.ca/~dac5/CaseStudy2015/CaseStudy2015/Dataset.html>
+**Decision** (per ADR-0013): hybrid — Flood-It as the real-data backbone, synthetic ad-revenue layer for the dimension public data doesn't cover.
 
-**Synthetic alternative.** Have Claude Code generate plausible event data with realistic monetization patterns:
+**Real backbone — GA4 Flood-It! sample.** Real F2P puzzle game events, 2018-08 → 2018-12, hundreds of millions of rows already public in BigQuery at `firebase-public-project.analytics_153293282.events_*`. CC-BY 4.0. Read in place via a dbt source declaration — *not* copied into our `raw` dataset:
 
-- D1 retention 40%, D7 20%, D30 8%
-- ~3% paying conversion
-- 80/20 whale concentration
+```yaml
+# monetization_warehouse/models/staging/floodit/_floodit__sources.yml
+sources:
+  - name: floodit
+    database: firebase-public-project
+    schema: analytics_153293282
+    tables:
+      - { name: events, identifier: 'events_*' }
+```
 
-Save as Parquet, load to BigQuery `raw`.
+Verify access:
 
-> **📝 Decision-time doc:** Write **ADR-0013** — *"Data acquisition: real Uken dataset vs. synthetic generator"* — including data limitations, why you chose what you chose, what you'd swap to later.
+```sh
+bq --project_id=monetization-warehouse query --nouse_legacy_sql \
+  'SELECT event_name, COUNT(*) AS n
+   FROM `firebase-public-project.analytics_153293282.events_20180801`
+   GROUP BY event_name ORDER BY n DESC LIMIT 5'
+```
+
+**Synthetic ad-revenue layer.** Public ad-revenue datasets at row-level don't exist (verified by exhaustive search). A Python generator produces `ad_impression` / `ad_request` / `ad_revenue` events keyed against Flood-It's `user_pseudo_id` space, calibrated to published industry benchmarks (eCPM, fill rate, request frequency). Write Parquet → load to `raw.synthetic_ad_events`. Every synthetic row carries `is_synthetic = TRUE`; tables are prefixed `synthetic_` so the boundary is visible everywhere.
+
+Why this hybrid and not pure-real or pure-synthetic: see ADR-0013. Recruiter scan wants "real F2P data" as a binary signal (Flood-It satisfies it); interviewer evaluates analytical depth (synthetic ad layer enables ad-mediation analytics that Flood-It can't); diminishing returns kicks in fast past one strong real source.
+
+> **📝 Decision-time doc:** ADR-0013 lands in the same commit as the dbt source declaration above. Lists the search results, alternatives considered, and why Flood-It + synthetic ad layer beat the alternatives (Universalis FFXIV, Uken 2015, multi-real, pure synthetic).
 
 ### Step 5.2: Build the dbt model layer
 

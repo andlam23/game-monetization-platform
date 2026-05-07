@@ -1,0 +1,23 @@
+version: 2
+
+sources:
+  - name: floodit
+    description: >
+      Real F2P puzzle-game event data from Google's GA4 sample dataset
+      (Flood-It! by LabPixies, 2018-08 → 2018-12). Read in place — not copied
+      into our project — per ADR-0013. Tables are sharded daily as
+      `events_YYYYMMDD`. CC-BY 4.0.
+    database: firebase-public-project
+    schema: analytics_153293282
+    tables:
+      - name: events
+        identifier: 'events_*'
+        description: >
+          Daily-sharded GA4 event tables. 114 days of events covering
+          screen_view, user_engagement, level_start_quickplay,
+          level_end_quickplay, level_complete_quickplay, post_score, IAP
+          (ecommerce field), and attribution (traffic_source).
+        loaded_at_field: TIMESTAMP_MICROS(event_timestamp)
+        # Cross-project queries are billed against monetization-warehouse's
+        # 1 TB/month free tier — staging models must filter on _TABLE_SUFFIX
+        # (event_date) to avoid scanning all shards.
