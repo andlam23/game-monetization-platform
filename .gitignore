@@ -191,3 +191,9 @@ cython_debug/
 **/credentials*.json
 **/service-account*.json
 .gcp/
+
+# dbt — generated artifacts (compile/run output, downloaded packages, logs)
+**/target/
+**/dbt_packages/
+**/logs/
+**/.user.yml
