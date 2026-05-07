@@ -25,12 +25,14 @@ Use the **GA4 Flood-It! sample** as the single real-data source, supplemented by
 - Provides: session events, engagement, level start/complete/fail, screen views, IAP events (`ecommerce` field), install attribution (`traffic_source`), pseudo IDs, geo, device.
 - Provides the canonical metrics' numerator/denominator inputs: ARPDAU, ARPPU (paying-user IAP), retention cohorts (D1/D7/D30), conversion funnel.
 
-**Synthetic data — ad layer only**:
-- Python generator that produces `ad_impression`, `ad_request`, `ad_revenue` events keyed against Flood-It's `user_pseudo_id` space, written to Parquet, loaded to `raw.synthetic_ad_events`.
-- Calibrated parameters sourced from published industry benchmarks (eCPM by region, fill rate, ad request frequency by session length). Citations live in the generator's docstring and are mirrored in the ADR's References section as they're chosen.
-- Generated content is **always** marked synthetic — column `is_synthetic = TRUE`, table prefixed `synthetic_`, dbt source description flags it.
+**Synthetic data — ad layer + IAP layer**:
+- **Ad layer.** Python generator (`scripts/data/generate_synthetic_ad_events.py`) producing `ad_impression`, `ad_request`, `ad_revenue` events keyed against Flood-It's `user_pseudo_id` space, written to Parquet, loaded to `raw.synthetic_ad_events`. Calibrated to AppLovin / ironSource / Unity LevelPlay industry benchmarks for casual-puzzle eCPM by placement and region tier.
+- **IAP layer (added after build).** Python generator (`scripts/data/generate_synthetic_iap_events.py`) producing `iap_purchase` events. Sub-samples ~3% of Flood-It users as payers, draws per-payer LTV from log-normal(μ = ln 5, σ = 2.0), decomposes each LTV into individual purchases at realistic price tiers ($0.99 → $99.99). Percentile-based payer segmentation: top 10% = whale, next 30% = dolphin, bottom 60% = minnow. Loaded to `raw.synthetic_iap_events`. Verified output produces 68% whale-revenue concentration (within realistic 60-85% range for casual puzzle).
+- Both layers: every row carries `is_synthetic = TRUE`, tables are prefixed `synthetic_`, dbt source descriptions flag them.
 
-**Battle pass, gacha, and detailed waterfall data are not generated.** No public dataset has them and synthesizing them adds surface area without recruitment value. Out of scope for this project.
+**Why an IAP layer in addition to ads (scope amendment)**: Flood-It contains only **17 `in_app_purchase` events across 5 months** — discovered when building Step 5.3's model layer. That's far too sparse to compute ARPPU, LTV, conversion rate, or whale concentration honestly. Without the synthetic IAP supplement, four of the six canonical metrics named in `CLAUDE.md` (ARPPU, LTV, conversion rate, whale concentration) couldn't be demonstrated at all — defeating the project's stated purpose. The same calibration discipline used for ads (industry-benchmark parameters, transparent `is_synthetic` flag, ADR-documented gap) closes this without weakening the "real backbone" narrative.
+
+**Battle pass, gacha, and detailed waterfall data are still not generated.** Marginal value past the ad + IAP layers is low; no public dataset has them either. Out of scope for this project.
 
 ## Alternatives
 

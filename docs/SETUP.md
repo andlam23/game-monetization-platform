@@ -519,9 +519,11 @@ Why this hybrid and not pure-real or pure-synthetic: see ADR-0013. Recruiter sca
 
 > **📝 Decision-time doc:** ADR-0013 lands in the same commit as the dbt source declaration above. Lists the search results, alternatives considered, and why Flood-It + synthetic ad layer beat the alternatives (Universalis FFXIV, Uken 2015, multi-real, pure synthetic).
 
-### Step 5.2: Build the synthetic ad-revenue generator
+### Step 5.2: Build the synthetic data generators (ad + IAP)
 
-Per ADR-0013, ad-revenue events don't exist in Flood-It and no public dataset has them at row level. Build a Python generator that produces realistic ad-revenue data calibrated to published industry benchmarks, write it as Parquet, and load to `raw.synthetic_ad_events`.
+Per ADR-0013, two synthetic layers are needed because Flood-It alone provides neither ad-revenue events at row level (don't exist publicly) nor enough IAP events to be analytically useful (only 17 across 5 months — discovered when starting Step 5.3). Both layers follow the same pattern: Python generator → Parquet → `bq load` to `raw.synthetic_*_events`.
+
+**Ad-revenue generator** at `scripts/data/generate_synthetic_ad_events.py`:
 
 **Where it lives**: `scripts/data/generate_synthetic_ad_events.py`. CLI-driven (`uv run python scripts/data/generate_synthetic_ad_events.py --start 2018-08-01 --end 2018-12-31 --out data/synthetic_ad_events.parquet`).
 
@@ -556,6 +558,35 @@ bq --project_id=monetization-warehouse load \
 The output Parquet file should be gitignored (it's generated, not source). The generator script is the source of truth.
 
 **Dagster integration** (Phase 5.4 / 5.5 work, mentioned here for context): wrap the generator as a Dagster asset so it shows up in the asset graph alongside the dbt-Flood-It assets. Asset dependency: synthetic ad events declare `user_pseudo_id` keys that come from Flood-It events, so in Dagster the synthetic asset depends on at least one Flood-It-derived staging asset.
+
+**IAP generator** at `scripts/data/generate_synthetic_iap_events.py` (added after Step 5.3 surfaced that Flood-It has only 17 real `in_app_purchase` events — see ADR-0013 amendment):
+
+Sub-samples ~3% of Flood-It users as payers (calibrated against the GameAnalytics State of Mobile casual-puzzle benchmark). Draws per-payer total LTV from a log-normal distribution (μ = ln 5, σ = 2.0) tuned to produce 60-85% whale-revenue concentration on the actual cohort size. Greedy-decomposes each payer's LTV into individual purchases at realistic price tiers ($0.99 / $2.99 / $4.99 / $9.99 / $19.99 / $49.99 / $99.99); whales lean upper tiers, casual payers lean lower. First-purchase timestamps are concentrated near user start via a Beta(1.5, 5) bias.
+
+**Payer segmentation is percentile-based** on the actual cohort, not a fixed dollar threshold:
+
+- `whale` — top 10% by lifetime spend
+- `dolphin` — next 30%
+- `minnow` — bottom 60%
+
+This is defensible because industry definitions vary ("$100+ lifetime spend" vs. "top 10% of payers"); percentile guarantees the segment label matches what an analyst would compute against the actual data.
+
+Schema fields: `event_timestamp_us`, `event_date`, `user_pseudo_id`, `ga_session_id`, `event_name='iap_purchase'`, `product_id`, `product_category`, `price_usd`, `country`, `payer_segment`, `is_synthetic=TRUE`.
+
+Generate + load:
+
+```sh
+uv run python scripts/data/generate_synthetic_iap_events.py \
+  --start 2018-08-01 --end 2018-12-31 --seed 42 \
+  --out data/synthetic_iap_events.parquet
+
+bq --project_id=monetization-warehouse load \
+  --source_format=PARQUET --replace \
+  raw.synthetic_iap_events \
+  data/synthetic_iap_events.parquet
+```
+
+Sanity-check the loaded data should show whale-revenue concentration in the 60-80% range; the verification query in Step 5.3 will catch this.
 
 ### Step 5.3: Build the dbt model layer
 
