@@ -519,12 +519,48 @@ Why this hybrid and not pure-real or pure-synthetic: see ADR-0013. Recruiter sca
 
 > **📝 Decision-time doc:** ADR-0013 lands in the same commit as the dbt source declaration above. Lists the search results, alternatives considered, and why Flood-It + synthetic ad layer beat the alternatives (Universalis FFXIV, Uken 2015, multi-real, pure synthetic).
 
-### Step 5.2: Build the dbt model layer
+### Step 5.2: Build the synthetic ad-revenue generator
+
+Per ADR-0013, ad-revenue events don't exist in Flood-It and no public dataset has them at row level. Build a Python generator that produces realistic ad-revenue data calibrated to published industry benchmarks, write it as Parquet, and load to `raw.synthetic_ad_events`.
+
+**Where it lives**: `scripts/data/generate_synthetic_ad_events.py`. CLI-driven (`uv run python scripts/data/generate_synthetic_ad_events.py --start 2018-08-01 --end 2018-12-31 --out data/synthetic_ad_events.parquet`).
+
+**What it generates** — three event types, one row per event:
+
+- `ad_request` — emitted on a per-session cadence (sessions are joined from Flood-It's `user_pseudo_id` + `ga_session_id` keys). Fields: `event_timestamp`, `user_pseudo_id`, `ga_session_id`, `ad_unit`, `placement` (interstitial / rewarded / banner), `country`.
+- `ad_impression` — emitted only when the ad request fills, governed by region- and placement-aware fill rates. Same key fields plus `ad_network`, `eCPM_usd`.
+- `ad_revenue` — derived from impression × eCPM / 1000. Same key fields plus `revenue_usd`.
+
+Every row carries `is_synthetic = TRUE`. Tables are prefixed `synthetic_` so the boundary is visible in any downstream `ref()`.
+
+**Calibration parameters** — cite the source in the script's docstring:
+
+- eCPM by region & placement (rewarded > interstitial > banner; US > EU > APAC > LATAM)
+- Fill rate by region (~95-99% in tier-1, lower in tier-3)
+- Ad-request frequency per session minute (capped to feel realistic)
+- Casual-puzzle-genre ad load expectations (1 interstitial per ~2 levels; 1 rewarded per session if offered)
+
+Use **AppLovin / ironSource / Unity LevelPlay public industry reports** as the calibration anchor. Pin the report year and link in the docstring so an interviewer asking "where did your fill-rate come from?" gets a real answer.
+
+**Loading to BigQuery**:
+
+```sh
+bq --project_id=monetization-warehouse load \
+  --source_format=PARQUET \
+  raw.synthetic_ad_events \
+  data/synthetic_ad_events.parquet
+```
+
+The output Parquet file should be gitignored (it's generated, not source). The generator script is the source of truth.
+
+**Dagster integration** (Phase 5.4 / 5.5 work, mentioned here for context): wrap the generator as a Dagster asset so it shows up in the asset graph alongside the dbt-Flood-It assets. Asset dependency: synthetic ad events declare `user_pseudo_id` keys that come from Flood-It events, so in Dagster the synthetic asset depends on at least one Flood-It-derived staging asset.
+
+### Step 5.3: Build the dbt model layer
 
 Three layers:
 
-- `stg_events` — cleans raw events
-- `fct_revenue_daily` — per-day-per-player revenue
+- `stg_events` — cleans raw events (Flood-It events + synthetic ad events as separate staging models)
+- `fct_revenue_daily` — per-day-per-player revenue (IAP + ad)
 - `dim_players` — lifetime stats per player
 
 ```sh
@@ -534,11 +570,11 @@ dbt test
 
 > **📝 Glossary discipline:** For every metric encoded in `fct_*` and `dim_*`, **fill in the corresponding glossary entry** before the model's SQL is committed. ARPDAU, DAU, LTV, retention buckets — every one. Glossary entry and SQL ship in the same commit.
 
-### Step 5.3: Wire up Soda checks
+### Step 5.4: Wire up Soda checks
 
 Define checks in `soda/checks.yml` for freshness, row counts, null rates on the marts. Schedule via Dagster sensor.
 
-### Step 5.4: Build your first Looker Studio dashboard
+### Step 5.5: Build your first Looker Studio dashboard
 
 Six tiles on `fct_revenue_daily`:
 
@@ -551,7 +587,7 @@ Six tiles on `fct_revenue_daily`:
 
 **Make it look polished.** Walkthrough: <https://blog.coupler.io/bigquery-to-data-studio/>
 
-### Step 5.5: Push events to Amplitude
+### Step 5.6: Push events to Amplitude
 
 Send a sample of your events to Amplitude's HTTP API. A few hundred is enough to play with funnel and retention views and speak to it in interviews.
 
