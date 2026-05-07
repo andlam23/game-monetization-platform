@@ -12,6 +12,13 @@ dependencies = [
     # Data quality (per ADR-0005 — Soda layer)
     "soda-core-bigquery>=3.5",
 
+    # Observability (Sentry — Dagster process error reporting)
+    "sentry-sdk>=2.0",
+
+    # Env file loading — resolves .env upward from any cwd so Dagster running
+    # from monetization_orchestration/ still sees env vars from the repo root.
+    "python-dotenv>=1.0",
+
     # Orchestration project — installed editable so dagster dev can import
     # the package; its own dependencies (dagster, dagster-dbt, dagster-gcp,
     # dagster-gcp-pandas, dagster-webserver, dagster-dg-cli) are pulled in
