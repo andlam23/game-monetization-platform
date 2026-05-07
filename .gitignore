@@ -181,3 +181,13 @@ cython_debug/
 .cursorindexingignore
 # Claude Code
 .claude/settings.local.json
+
+# GCP / service account credentials
+# Real keys live outside the repo (~/.gcp/), but these patterns are defensive
+# in case anyone copies a key file in by accident. Targeted instead of `*.json`
+# so legitimate config JSON (.claude/settings.json, tsconfig.json, etc.) stays
+# trackable. ADR-0011 has the full permission-scope rationale.
+**/*-creds.json
+**/credentials*.json
+**/service-account*.json
+.gcp/
