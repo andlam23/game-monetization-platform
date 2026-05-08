@@ -37,6 +37,38 @@ Re-run `setup_duckdb.py` whenever:
 
 Existing tables in DuckDB are dropped and replaced; SRS state is preserved.
 
+## Recommended workflow
+
+Repetition matters more than session length. The cadence below is calibrated to the 2026 monetization-analyst interview format (live SQL on CoderPad, case-study presentations, behavioral STAR; AI mostly banned in live rounds at game studios — so active recall is the right shape).
+
+### Daily — 10–15 minutes
+
+1. **Flashcards** (5–10 min). Open the app → Flashcards. Whatever's due, drill it. Self-grade honestly: *got it cold and complete* = ✅, *anything missed* = ❌. The SRS algorithm spaces correct answers further out and resurfaces wrong answers tomorrow. Don't peek before grading — the value is in the recall attempt, not the lookup.
+2. **One SQL drill** (5 min). Pick one from the dropdown — preferably one you haven't seen. Write the query *cold*, no hints, no peeking at the reference. Run it. If it fails, read the failure message before opening hints. Only reveal the reference query after a serious attempt. Wrong answers teach you more than hint-assisted right ones.
+
+### Weekly — 30–45 minutes
+
+3. **Case studies, talked through out loud** (15–20 min). One or two prompts. Stand up, pace, narrate your hypothesis tree like an interviewer is on the call. Type a draft into the notes box if it helps you structure. Reveal the model narrative *only after* you've spoken your full answer. Compare structure (did you decompose ARPDAU into ad+IAP? did you mention validation before remediation?) — not exact wording.
+4. **STAR / behavioral, written before talked** (10–15 min). Pick two prompts. Fill all four S/T/A/R boxes for each. Then say it out loud as if to an interviewer; the written form is a draft, not a script. Reveal the reference structure to compare specifics — *was your "Result" concrete with numbers, or was it vague?*
+5. **One project walkthrough timer run** (5–15 min depending on which length you pick). Hit Start. Talk for the full duration without pausing. Tick beats in real time. End-of-run coverage tells you what you forgot.
+
+### Pre-interview cycle (e.g., week of an actual interview)
+
+- **2 days before**: full pass through STAR + project walkthrough. The 5-minute dashboard demo is what you'll likely give in the recruiter screen and the hiring-manager round.
+- **1 day before**: SQL drills only. Random selection, all difficulties, cold. Build live-pressure muscle memory.
+- **Morning of**: flashcards quick pass on the `numbers` and `metrics` decks (specific values you'll need to cite — $8,716 total revenue, 86% top-1% concentration, 13.4% D1, 68% whale share). Memorizing specific numbers from your own data signals depth fast.
+
+### Maintenance
+
+- **When a flashcard keeps coming up wrong**: that's a real gap. Edit `content/flashcards.yaml` to add a *follow-up* card that probes the gap from a different angle. (E.g., if you keep blanking on whale concentration's *formula*, add a card asking specifically for the SQL.)
+- **When a new artifact lands in the repo** (new ADR, new mart, updated SETUP step): update the relevant content YAML in the same commit. Stale content is worse than no content.
+- **Rebuild the DuckDB snapshot** after regenerating synthetic data or adding/changing a mart — `uv run python scripts/study/setup_duckdb.py`. SRS state is preserved across rebuilds.
+
+### What to skip
+
+- Don't drill the `setup-discoveries` deck before SQL/metrics decks. The setup gotchas are interview-relevant only if pressed; the metrics and architecture are foundation. Filter the deck multiselect at the top of Flashcards mode.
+- Don't try to memorize the model narratives for case studies word-for-word. Memorize the *structure* (validate → decompose → segment → recommend). The interview answer should sound like you, not the YAML.
+
 ## Adding content
 
 The decks are plain YAML — add cards / drills / cases / prompts / beats by editing the files in `content/`. Re-running the app picks up changes (Streamlit's `@st.cache_data` decorators clear when files change). For SQL drills, follow the existing schema: `id`, `difficulty`, `prompt`, `hints`, `reference_query`, optional `expected_value` block.

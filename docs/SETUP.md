@@ -831,6 +831,43 @@ Status goes `building` → `built` in ~30-60s.
 
 **Regeneration cadence**: manual on each model change (no GitHub Action wired — overkill for a static portfolio with infrequent updates). Just rerun the `generate --static` + `cp` pair and push.
 
+### Step 6.4: Build the interview-prep study tool
+
+The portfolio is the artifact a recruiter scans, but in the actual interview loop you'll be tested on every part of it cold — live SQL on CoderPad/HackerRank, case-study walkthroughs ("ARPDAU dropped 30%, diagnose"), behavioral STAR ("tell me about a decision under uncertainty"), and the project walkthrough ("walk me through your project"). 2026 game-studio interviews are mostly **no-AI in live rounds**, so passive re-reading doesn't internalize the content under pressure. Build an **active-recall** study tool drilling exactly the formats interviewers use.
+
+Lives at `scripts/study/`. Streamlit app with five modes:
+
+| Mode | What it drills | Format |
+|------|---------------|--------|
+| Flashcards | Metric formulas, ADR decisions/alternatives, calibration numbers, stack facts, setup gotchas | SM-2-lite spaced repetition; SQLite state |
+| SQL drills | ARPDAU, retention, whale share, cohort revenue, fill rate, etc. | Local DuckDB sandbox; runs your query, compares to expected |
+| Case studies | Diagnostic / design prompts derived from `docs/analyses/` | Free-form draft → reveal model narrative + gotcha |
+| STAR / behavioral | Real ADR-mapped behavioral prompts | Fill S/T/A/R skeleton → reveal reference structure |
+| Project walkthrough | 90-second elevator / 5-min dashboard / 15-min architecture | Live timer + beat checklist for self-grading coverage |
+
+Content lives in editable YAML files under `scripts/study/content/` so the decks grow as the project does. SQL drills run against a local DuckDB snapshot of the BigQuery marts (no auth, no quota burn, offline).
+
+**Setup:**
+
+```sh
+# One-time: build the local DuckDB snapshot from the BigQuery marts (~30s).
+uv run python scripts/study/setup_duckdb.py
+
+# Launch the app.
+uv run streamlit run scripts/study/app.py
+```
+
+App opens at `http://localhost:8501`. SRS state, Parquet exports, and the DuckDB file persist in `scripts/study/data/` (gitignored).
+
+**Recommended workflow** (full version in `scripts/study/README.md`):
+
+- **Daily, 10–15 min**: due flashcards + one SQL drill cold (no hints/peeking until a real attempt).
+- **Weekly, 30–45 min**: case studies talked through OUT LOUD before revealing model; STAR drills with all four boxes filled before revealing reference; one project-walkthrough timer run.
+- **Pre-interview cycle (T-2 / T-1 / morning of)**: STAR + walkthrough pass two days out, SQL-only the day before, `numbers` and `metrics` decks the morning of.
+- **Maintenance**: when a card keeps coming up wrong, add a follow-up card from a different angle in `content/flashcards.yaml`. When the repo gains a new ADR / mart / setup step, update the matching content YAML in the same commit. Stale content is worse than no content.
+
+**Why scope is repo content only**: the tool is for internalizing *this* project's specifics, not for replacing broader interview prep (LeetCode SQL, statistics review, F2P industry knowledge). Those are separate practice surfaces; this one closes the gap between "I built this" and "I can articulate every layer cold."
+
 ---
 
 ## Final checklist
@@ -841,8 +878,9 @@ Status goes `building` → `built` in ~30-60s.
 - [ ] Phase 3: dbt + Dagster + Soda installed and connected, ADR-0012 written
 - [ ] Phase 4: Looker Studio, Amplitude, Sentry accounts set up
 - [ ] Phase 5: Data loaded (with ADR-0013), dbt models running, glossary filled in, dashboard live, Amplitude events flowing
-- [ ] Phase 6: Three analyses written, repo presentable, pinned on profile
+- [ ] Phase 6: Three analyses written, repo presentable + pinned on profile, dbt docs site published, interview-prep study tool built and seeded
 - [ ] CAREER.md tracks running in parallel (industry fluency, critical play, networking, fallback prep)
+- [ ] Daily / weekly study-tool cadence in motion (flashcards + SQL drills daily; case studies + STAR + walkthrough weekly)
 
 ## Maintenance rules (forever)
 
