@@ -1,0 +1,238 @@
+# Behavioral / STAR drills mapped to specific ADRs in the repo.
+# Each prompt is the kind of question a behavioral round actually asks.
+# The 'maps_to' field is the real thing in this project that you should
+# use as your STAR answer's content.
+# 'structure' provides the user a Situation/Task/Action/Result skeleton
+# they can fill in out loud.
+
+- prompt: "Tell me about a technical decision you made under uncertainty."
+  maps_to: "ADR-0013 — data acquisition (Flood-It + synthetic ad layer)"
+  structure:
+    situation: |
+      The project required real F2P monetization data with IAPs, ad
+      revenue, attribution, and demographics. Two exhaustive searches
+      across Kaggle, Hugging Face, GitHub, AWS Open Data, BigQuery
+      public datasets, and industry research orgs confirmed nothing
+      modern (2023+) row-level F2P public exists with that schema —
+      studios treat that bundle as a competitive moat.
+    task: |
+      Pick a data path that lets the project demonstrate every canonical
+      monetization metric without faking real data into the resume
+      narrative.
+    action: |
+      Decided on a hybrid: GA4 Flood-It! sample as the real backbone
+      (2018, real F2P puzzle game, BigQuery-native, CC-BY 4.0), plus
+      a calibrated synthetic ad-revenue layer for the dimension public
+      data doesn't cover. Documented in ADR-0013 with explicit
+      alternatives considered (pure synthetic, multi-real, real Uken
+      2015 alone) and the diminishing-returns reasoning.
+    result: |
+      Pipeline runs end-to-end with real data feeding real metrics where
+      possible, and synthetic data clearly marked is_synthetic=TRUE
+      everywhere it isn't. Recruiter narrative: "worked with real F2P
+      data + documented synthetic supplements." Hiring-manager defense:
+      "the same code computes correct metrics against any data with the
+      same shape; synthetic was the only honest path for ad/IAP gaps."
+
+- prompt: "Tell me about a time you discovered a problem mid-project and pivoted."
+  maps_to: "ADR-0013 amendment — IAP layer added after discovering only 17 real IAPs"
+  structure:
+    situation: |
+      Started Step 5.3 (the dbt model layer) and queried Flood-It's
+      event_name distribution to plan staging. Discovered only 17
+      `in_app_purchase` events across 5 months of data — too sparse for
+      ARPPU, LTV, conversion rate, or whale concentration to be
+      computable honestly.
+    task: |
+      Either drop four of the six canonical metrics from the project
+      (defeating its stated purpose), or extend the synthetic supplement
+      scope to cover IAPs.
+    action: |
+      Paused dbt model work. Amended ADR-0013 in-place to add an IAP
+      layer to scope, with the discovery captured in the Context section
+      of the ADR. Built a second synthetic generator (scripts/data/
+      generate_synthetic_iap_events.py) calibrated to ~3% paying
+      conversion and log-normal LTV with percentile-based whale
+      segmentation. Re-ran the model layer against the new data, all
+      metrics computable.
+    result: |
+      Six canonical metrics encoded with glossary entries pointing at
+      their source-of-truth marts. Every synthetic row flagged
+      is_synthetic=TRUE. The amendment process itself demonstrated the
+      ADR discipline: decisions get amended honestly when reality forces
+      a change, not retroactively rationalized.
+
+- prompt: "Tell me about a time you went with a more conservative option."
+  maps_to: "ADR-0011 — BigQuery service account permission scope"
+  structure:
+    situation: |
+      Step 2.2 required creating a service account for dbt/Dagster to
+      authenticate to BigQuery. Three options on the table: minimum-
+      viable (dataEditor + jobUser), the dbt-recommended trio (adds
+      `bigquery.user`), or the broad option (`bigquery.admin`).
+    task: |
+      Pick the role set that lets dbt and ad-hoc analyst queries work
+      without granting blast-radius access to other GCP projects, IAM,
+      or billing.
+    action: |
+      Went with the dbt-recommended trio (dataEditor + jobUser + user)
+      rather than the absolute minimum. Documented in ADR-0011: marginal
+      blast radius of adding `user` is small (no write privileges, no
+      cross-project access), and it covers ad-hoc queries / docs
+      generation / metadata reads that the strict-minimum config
+      doesn't. Refused `bigquery.admin` outright as massively over-scoped.
+    result: |
+      Service account works for every actual operation the project needs
+      without any permission errors during the build, and a leak of the
+      JSON key would expose only this one project's BigQuery, not GCP
+      infrastructure or other projects. .gitignore patterns target
+      credential-shaped filenames defensively.
+
+- prompt: "Tell me about a time you pushed back on official guidance or a doc."
+  maps_to: "Diverged from SETUP.md's `*.json` gitignore in favor of targeted patterns"
+  structure:
+    situation: |
+      SETUP.md's Step 2.2 said to add `*.json` to .gitignore as the
+      defense against accidentally committing the GCP service account
+      key.
+    task: |
+      Implement the leak-prevention without breaking legitimate JSON
+      config the project would eventually want to track (Claude Code
+      project settings, dbt artifacts, tsconfig if a frontend is added).
+    action: |
+      Diverged from the doc. Used targeted patterns instead:
+      `**/*-creds.json`, `**/credentials*.json`,
+      `**/service-account*.json`, `.gcp/`. Documented the divergence in
+      the same commit's message, in ADR-0011's reasoning, AND in
+      SETUP.md itself (updated the doc after the fact so future readers
+      get the corrected guidance).
+    result: |
+      The leak-prevention intent is satisfied more precisely. Project
+      can later commit legitimate JSON config files without revising
+      the .gitignore rule. SETUP.md now reflects what was actually done,
+      not the original doc's literal advice.
+
+- prompt: "Tell me about a debugging story — something that took you longer than expected."
+  maps_to: |
+    The Flood-It pre-GA4 schema discovery + the claude-mem MCP Windows fix.
+    Pick whichever fits the time budget; the schema one is more
+    monetization-analyst-relevant.
+  structure:
+    situation: |
+      Synthetic ad generator first run returned zero sessions when
+      querying Flood-It. Diagnostic queries showed the data IS there
+      (114 daily-sharded tables, ~3.2M events). Generator's session
+      query was specifically asking for `ga_session_id` from the
+      `event_params` array.
+    task: |
+      Find why a standard GA4 query against a Google-published GA4
+      sample returns zero rows.
+    action: |
+      Pulled the actual event_params key distribution. Discovered
+      Flood-It uses the PRE-GA4 Firebase Analytics schema (it's from
+      2018, before GA4 unified the schemas). No `ga_session_id` exists;
+      sessions are tracked via `firebase_screen_id` and time gaps.
+      Pivoted the generator to approximate sessions as one user × one
+      day, with a deterministic synthetic ga_session_id derived from
+      SHA1(user_pseudo_id|event_date)[:8]. Documented the schema quirk
+      in the script's docstring and in the dbt source description.
+    result: |
+      Generator ran correctly against the real data shape. For ARPDAU
+      and per-day metrics, user-day is the right grain anyway. The
+      diagnostic process — query event_params keys directly when the
+      expected key doesn't appear — became a reusable troubleshooting
+      pattern for any GA4-shaped data.
+
+- prompt: "Tell me about a time you had to reduce scope to ship."
+  maps_to: |
+    Phase 5 search for a 'perfect' real F2P dataset; converged on
+    Flood-It + synthetic supplement after recognizing diminishing returns.
+  structure:
+    situation: |
+      The project's data acquisition step had a tempting failure mode:
+      keep searching for a 'perfect' real F2P dataset that meets all six
+      criteria (modern, row-level, IAP, ads, attribution, demographics)
+      and never start the actual model layer.
+    task: |
+      Pick a data path that's GOOD ENOUGH for the analyst portfolio's
+      narrative without burning weeks searching for or building data.
+    action: |
+      Ran two exhaustive search passes via research agents. Both
+      confirmed nothing meets all criteria publicly. Applied a
+      diminishing-returns lens to scope: recruiter scan only needs the
+      binary 'real F2P data' bit; hiring manager values DEPTH on one
+      source over BREADTH across many. Picked Flood-It (real backbone)
+      + synthetic ad layer (the ONE supplement that closes a real gap)
+      and STOPPED. Rejected adding Universalis FFXIV or Uken 2015 even
+      though they're both real, because marginal recruiter value was
+      low and engineering hours were better spent on model quality.
+    result: |
+      Project shipped to a working dashboard in days, not weeks. Each
+      decision visible in ADR-0013. The discipline — knowing when to
+      stop searching for the 'right' data — translates directly to
+      live-ops priority decisions: optimize the high-leverage thing,
+      don't chase marginal sources.
+
+- prompt: "Tell me about a time you had to communicate a complex technical concept to a less-technical stakeholder."
+  maps_to: |
+    Three written analyses in docs/analyses/ + the README architecture diagram
+  structure:
+    situation: |
+      Project had real depth — dbt models, Dagster orchestration, Soda
+      checks, calibrated synthetic data, three-layer data quality. A
+      hiring manager scanning the repo for 30 seconds couldn't possibly
+      hold all of it.
+    task: |
+      Make the project legible at multiple depths — recruiter scan
+      (5 sec), hiring manager review (5 min), technical interviewer
+      audit (15+ min) — without watering it down.
+    action: |
+      Built three layers of communication artifacts:
+        - Tagline + Mermaid architecture diagram in the README:
+          GitHub renders Mermaid natively, so a single scroll shows the
+          full data flow with dotted overlay for orchestration/quality.
+        - Three written analyses in docs/analyses/, each grounded in
+          actual SQL against the warehouse, with concrete recommendations
+          and honest caveats. Each piece reads like an analyst memo.
+        - 13 ADRs documenting every architectural choice with context
+          and alternatives. A technical interviewer auditing for
+          architectural maturity finds them and gets the FULL reasoning,
+          not just the result.
+    result: |
+      Same project, three depths. Recruiter pattern-matches keywords;
+      hiring manager reads an analysis; technical interviewer reads
+      ADRs. None feels watered down because each is targeting its
+      audience's actual question.
+
+- prompt: "Tell me about a time you used the wrong tool or made a wrong call and had to course-correct."
+  maps_to: |
+    Initial synthetic IAP whale calibration came out at 12% concentration
+    instead of the 60-85% target; tuned and re-ran.
+  structure:
+    situation: |
+      Built the synthetic IAP generator with log-normal(μ=ln 5, σ=1.4)
+      and a fixed $100 LTV threshold for whale segmentation. First run
+      produced only 12.2% whale revenue concentration vs the 60-85%
+      target documented in ADR-0013.
+    task: |
+      Either accept the under-calibration (and rewrite the ADR to match
+      what the data actually showed), or fix the calibration to hit the
+      target.
+    action: |
+      Diagnosed the cause: σ=1.4 wasn't heavy enough in the tail, and
+      the fixed-$100 threshold was capturing too few users as 'whales'
+      against a small-cohort distribution. Made two fixes:
+        1. Bumped σ to 2.0 — heavier tail, P99 LTV ~$720 vs $130.
+        2. Switched whale classification from fixed threshold to
+           PERCENTILE-based: top 10% by LTV, regardless of absolute spend.
+           Defensible because industry whale definitions vary; percentile
+           guarantees the segment label matches what an analyst computes
+           from the data.
+      Re-ran the generator. Whale concentration came out at 68.4% —
+      mid-range of the target. Updated the script's docstring with the
+      tuning notes.
+    result: |
+      The data shape now matches the ADR's stated target. The fix
+      itself became documentation: future readers see why σ=2.0 and
+      percentile-based segmentation were chosen over the simpler
+      alternatives.

@@ -1,0 +1,50 @@
+# Project walkthrough talking points at three lengths.
+# Each item: a duration, the situation it's used in, an ordered list of
+# beats the user should hit. Use as a timer-driven practice — start the
+# timer, talk through cold, check whether each beat was hit.
+
+- duration_seconds: 90
+  label: "Elevator pitch (90 sec)"
+  use_case: |
+    Recruiter screen, panel intro, dropping into a casual conversation.
+    What this hits: WHAT it is, WHY it exists, WHAT'S real vs. synthetic.
+  beats:
+    - "Open with the function: end-to-end F2P monetization analytics build."
+    - "Stack in one breath: BigQuery, dbt, Dagster, Soda, Looker Studio, Amplitude."
+    - "Data shape: real GA4 puzzle-game events (Flood-It! sample) + calibrated synthetic ad and IAP layers per ADR-0013."
+    - "Six canonical metrics: ARPDAU, ARPPU, LTV, retention, conversion, whale concentration — each with a glossary entry pointing at its source-of-truth dbt mart."
+    - "Pre-empt the 'synthetic data' question: every synthetic row is flagged is_synthetic=TRUE; calibration anchors documented."
+    - "Close: live dashboard at the linked URL; thirteen ADRs cover every architectural choice."
+
+- duration_seconds: 300
+  label: "Dashboard demo (5 min)"
+  use_case: |
+    Hiring manager interview, screen-share. The live dashboard is open;
+    talk through it and what each tile means.
+  beats:
+    - "Frame: this dashboard reads from three dbt mart tables — fct_revenue_daily, dim_players, fct_retention_cohorts. Six tiles, each a canonical monetization metric."
+    - "Tile 1 — ARPDAU over time. Daily curve, $0.05-$0.40 baseline with whale-purchase spikes to $0.70+. The spikes are diagnosable: single whale day per ADR-0013's calibration."
+    - "Tile 2 — Retention curve, D0 to D30. Three horizontal benchmark lines for industry casual-puzzle D1, D7, D30. Our D1 is below benchmark (13%); D30 is above (6%). Pattern: leaky front door, sticky back door."
+    - "Tile 3 — Paying conversion: 2.87%, matches ADR-0013's 3% calibration target."
+    - "Tile 4 — Cohort revenue. SUM(ltv_usd) by signup-day cohort. Two ~$900 spike days = whales joining specific cohorts. The spread is wide, which is the heavy-tailed F2P shape."
+    - "Tile 5 — LTV by payer segment. Whale segment dominates (~$5.5K, 68% of IAP revenue); non_payer has the user count (orange bar) but no revenue. This is the F2P fragility view."
+    - "Tile 6 — Total revenue scorecard, $8,716 with sparkline. Real ad ~$575 + synthetic IAP ~$8,141. Footer credits the data composition explicitly."
+    - "Pre-empt the 'where do these numbers come from' question: each tile's source mart is pinned in the glossary; click any model in the dbt docs site to see the lineage."
+
+- duration_seconds: 900
+  label: "Architecture deep-dive (15 min)"
+  use_case: |
+    Technical interview round, system-design-style. Walk through the
+    full pipeline at architectural depth.
+  beats:
+    - "Open with the data flow: real Flood-It events live in firebase-public-project's BigQuery dataset. We READ IN PLACE via a dbt source declaration — no copy, no storage cost. Synthetic generators (Python) write Parquet files which `bq load` into raw.synthetic_*."
+    - "dbt staging layer: three views, one per source per ADR-0012's stage-first structure. stg_floodit__events filters _TABLE_SUFFIX for partition pruning (cross-project query cost discipline against our 1TB free tier)."
+    - "Marts: fct_revenue_daily (day-partitioned, clustered on user_pseudo_id), dim_players (one row per user with payer_segment from synthetic_iap), fct_retention_cohorts (grain (cohort_date, day_offset), right-censored)."
+    - "Three-layer data quality per ADR-0005: 12 dbt tests (structural — uniqueness, not_null, accepted_values), 30 Soda checks (cross-source, freshness, distributional — including calibration assertions on conversion 2-5% and whale share 60-85%), Dagster soda_quality_scan asset with daily ScheduleDefinition."
+    - "Orchestration: Dagster Components-based scaffold (uvx create-dagster project, dg-managed). DbtProjectComponent wires the dbt project as a Dagster asset graph automatically — every dbt model becomes a Dagster asset with lineage."
+    - "Sentry catches errors in the Dagster process via sentry_sdk.init in definitions.py; python-dotenv with find_dotenv(usecwd=True) walks up to find the repo-root .env regardless of where dagster dev was invoked."
+    - "Consumers: Looker Studio dashboard reads marts directly; Amplitude has 500 stratified-sample events for funnel/retention demos via scripts/data/push_events_to_amplitude.py."
+    - "Glossary discipline: every metric encoded in fct_*/dim_* has a glossary entry filled in BEFORE the model SQL is committed. Source of truth: a specific mart column. Drift between code and docs is caught by the glossary's 'First defined' date."
+    - "ADR discipline: 13 ADRs covering every constraining choice. ADR-0013 was amended in-place when discovering Flood-It only has 17 IAP events — honest scope amendment, not retroactive rationalization."
+    - "Most interesting decision: ADR-0013 data acquisition. Walk through the diminishing-returns analysis: recruiter scan needs the binary 'real F2P data' bit, hiring manager values depth on one source over breadth across many, so stopped at Flood-It + synthetic ad/IAP rather than chasing Universalis FFXIV or Uken 2015 supplements."
+    - "What's not real (pre-empt audit): no production deployment, no live ingestion, data is static, no game has ever sent events through this. It's analyst-portfolio software, not a production monetization platform — distinction matters."

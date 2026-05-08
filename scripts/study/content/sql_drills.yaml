@@ -1,0 +1,242 @@
+# SQL drill prompts for the local DuckDB sandbox.
+# Each drill: a prompt (the question), one or more correct query patterns
+# (your answer is checked against the expected result, not the SQL itself),
+# expected result fields (columns and approximate values), and a hint.
+
+- id: arpdau_overall
+  difficulty: easy
+  prompt: |
+    Compute the overall ARPDAU across the full data window.
+    Expected single-row result with one column named `arpdau_usd`.
+  hints:
+    - "ARPDAU = SUM(total_revenue_usd) / COUNT(DISTINCT user_pseudo_id) on a single day, but you can also compute it over the whole window as SUM(revenue) / COUNT(DISTINCT user-day pairs where is_active_today)."
+    - "Source-of-truth table: analytics.fct_revenue_daily."
+  reference_query: |
+    SELECT
+      SUM(total_revenue_usd)
+        / COUNT(DISTINCT IF(is_active_today, CONCAT(CAST(event_date AS STRING), user_pseudo_id), NULL))
+        AS arpdau_usd
+    FROM analytics.fct_revenue_daily
+  expected_value:
+    column: arpdau_usd
+    approx: 0.2756
+    tolerance: 0.001
+
+- id: arpdau_by_day
+  difficulty: easy
+  prompt: |
+    Compute ARPDAU per day. Return one row per event_date with columns
+    `event_date` and `arpdau_usd`, ordered by event_date.
+  hints:
+    - "GROUP BY event_date and apply the per-day ARPDAU formula in each group."
+    - "Filter to is_active_today = TRUE in the COUNT DISTINCT denominator."
+  reference_query: |
+    SELECT
+      event_date,
+      SUM(total_revenue_usd)
+        / COUNT(DISTINCT IF(is_active_today, user_pseudo_id, NULL)) AS arpdau_usd
+    FROM analytics.fct_revenue_daily
+    GROUP BY event_date
+    ORDER BY event_date
+  expected_value:
+    row_count_min: 60
+    row_count_max: 70
+
+- id: paying_conversion
+  difficulty: easy
+  prompt: |
+    Compute the paying conversion rate across all users.
+    Single-row result, one column named `conversion_rate`, expressed as a
+    fraction in [0, 1].
+  hints:
+    - "Use dim_players. is_payer = TRUE means the user has at least one purchase."
+  reference_query: |
+    SELECT
+      SUM(CASE WHEN is_payer THEN 1 ELSE 0 END) * 1.0 / COUNT(*) AS conversion_rate
+    FROM analytics.dim_players
+  expected_value:
+    column: conversion_rate
+    approx: 0.0287
+    tolerance: 0.001
+
+- id: whale_revenue_share
+  difficulty: medium
+  prompt: |
+    Compute the whale revenue share — what % of TOTAL IAP revenue comes from
+    the `whale` payer_segment?
+    Single-row result, one column `whale_share` as a fraction in [0, 1].
+  hints:
+    - "dim_players.payer_segment is already labeled. Sum total_iap_revenue_usd by segment."
+    - "Numerator: whale-only IAP. Denominator: total IAP across all segments."
+  reference_query: |
+    SELECT
+      SUM(IF(payer_segment = 'whale', total_iap_revenue_usd, 0))
+        / NULLIF(SUM(total_iap_revenue_usd), 0) AS whale_share
+    FROM analytics.dim_players
+  expected_value:
+    column: whale_share
+    approx: 0.684
+    tolerance: 0.01
+
+- id: d7_retention
+  difficulty: medium
+  prompt: |
+    Compute the cohort-size-weighted D7 retention rate across all cohorts in
+    fct_retention_cohorts.
+    Single-row result, one column named `d7_retention`.
+  hints:
+    - "Filter to day_offset = 7. Weighted average ≠ AVG(retention_rate); the AVG would over-weight tiny cohorts."
+    - "Weighted = SUM(retained_users) / SUM(cohort_size) at the chosen offset."
+  reference_query: |
+    SELECT
+      SUM(retained_users) * 1.0 / NULLIF(SUM(cohort_size), 0) AS d7_retention
+    FROM analytics.fct_retention_cohorts
+    WHERE day_offset = 7
+  expected_value:
+    column: d7_retention
+    approx: 0.0725
+    tolerance: 0.005
+
+- id: ltv_by_segment
+  difficulty: medium
+  prompt: |
+    Show total IAP revenue, distinct user count, and average LTV by payer_segment.
+    Order by total revenue descending.
+    Columns: payer_segment, users, total_iap, avg_ltv.
+  hints:
+    - "GROUP BY payer_segment on dim_players. AVG(ltv_usd) for avg_ltv."
+  reference_query: |
+    SELECT
+      payer_segment,
+      COUNT(*) AS users,
+      ROUND(SUM(total_iap_revenue_usd), 2) AS total_iap,
+      ROUND(AVG(ltv_usd), 2) AS avg_ltv
+    FROM analytics.dim_players
+    GROUP BY payer_segment
+    ORDER BY total_iap DESC
+  expected_value:
+    row_count_exact: 4
+    contains_segments: ['whale', 'dolphin', 'minnow', 'non_payer']
+
+- id: top_country_revenue
+  difficulty: medium
+  prompt: |
+    Find the top 5 countries by total revenue (ad + IAP) and the user count
+    contributing to each.
+    Columns: country, users, total_revenue_usd. Order by revenue descending.
+  hints:
+    - "Use dim_players.country and ltv_usd."
+    - "country may be a full name string ('United States'), not an ISO code."
+  reference_query: |
+    SELECT
+      country,
+      COUNT(*) AS users,
+      ROUND(SUM(ltv_usd), 2) AS total_revenue_usd
+    FROM analytics.dim_players
+    GROUP BY country
+    ORDER BY total_revenue_usd DESC
+    LIMIT 5
+  expected_value:
+    row_count_exact: 5
+
+- id: cohort_revenue_curve
+  difficulty: hard
+  prompt: |
+    For each first_seen_date cohort in dim_players, compute total LTV and
+    paying-user count. Order by cohort_date ascending. Limit to cohorts of
+    at least 50 users (tiny early-window cohorts add noise).
+    Columns: first_seen_date, cohort_size, payers, total_ltv.
+  hints:
+    - "GROUP BY first_seen_date on dim_players."
+    - "HAVING COUNT(*) >= 50."
+    - "COUNTIF / SUM CASE WHEN for payers."
+  reference_query: |
+    SELECT
+      first_seen_date,
+      COUNT(*) AS cohort_size,
+      SUM(CASE WHEN is_payer THEN 1 ELSE 0 END) AS payers,
+      ROUND(SUM(ltv_usd), 2) AS total_ltv
+    FROM analytics.dim_players
+    GROUP BY first_seen_date
+    HAVING COUNT(*) >= 50
+    ORDER BY first_seen_date
+
+- id: revenue_concentration_pct
+  difficulty: hard
+  prompt: |
+    Compute revenue concentration buckets. Using PERCENT_RANK by ltv_usd over
+    dim_players, return the share of total revenue from the top 1%, top 5%,
+    top 10%, top 50%, and bottom 50% of all users.
+    Columns: bucket, users, revenue_usd, pct_total. Order by bucket ordering.
+  hints:
+    - "PERCENT_RANK() OVER (ORDER BY ltv_usd DESC) gives a 0..1 fraction from the top."
+    - "Use CASE WHEN to assign bucket labels."
+    - "SUM(SUM(ltv_usd)) OVER () gets you the grand total in the same query."
+  reference_query: |
+    WITH ranked AS (
+      SELECT *, PERCENT_RANK() OVER (ORDER BY ltv_usd DESC) AS pr
+      FROM analytics.dim_players
+    )
+    SELECT
+      CASE
+        WHEN pr < 0.01 THEN '01_top_1pct'
+        WHEN pr < 0.05 THEN '02_top_5pct'
+        WHEN pr < 0.10 THEN '03_top_10pct'
+        WHEN pr < 0.50 THEN '04_top_50pct'
+        ELSE '05_bottom_50pct'
+      END AS bucket,
+      COUNT(*) AS users,
+      ROUND(SUM(ltv_usd), 2) AS revenue_usd,
+      ROUND(100.0 * SUM(ltv_usd) / SUM(SUM(ltv_usd)) OVER (), 2) AS pct_total
+    FROM ranked
+    GROUP BY bucket
+    ORDER BY bucket
+  expected_value:
+    row_count_exact: 5
+
+- id: ad_fill_rate_by_country_tier
+  difficulty: hard
+  prompt: |
+    Compute ad fill rate (impressions / requests) for each country in the
+    raw.synthetic_ad_events table.
+    Filter to countries with at least 1000 ad_request events (drops noise).
+    Columns: country, requests, impressions, fill_rate. Order by fill_rate desc.
+  hints:
+    - "fill_rate = COUNTIF(event_name='ad_impression') / COUNTIF(event_name='ad_request')."
+    - "GROUP BY country, HAVING COUNTIF(event_name='ad_request') >= 1000."
+  reference_query: |
+    SELECT
+      country,
+      SUM(CASE WHEN event_name = 'ad_request' THEN 1 ELSE 0 END) AS requests,
+      SUM(CASE WHEN event_name = 'ad_impression' THEN 1 ELSE 0 END) AS impressions,
+      ROUND(
+        SUM(CASE WHEN event_name = 'ad_impression' THEN 1 ELSE 0 END) * 1.0
+          / NULLIF(SUM(CASE WHEN event_name = 'ad_request' THEN 1 ELSE 0 END), 0),
+        4
+      ) AS fill_rate
+    FROM raw.synthetic_ad_events
+    GROUP BY country
+    HAVING SUM(CASE WHEN event_name = 'ad_request' THEN 1 ELSE 0 END) >= 1000
+    ORDER BY fill_rate DESC
+
+- id: retention_full_curve
+  difficulty: medium
+  prompt: |
+    Return the full weighted retention curve, day_offset 0 through 30, with
+    cohort_size_total and weighted_retention.
+    Columns: day_offset, cohort_size_total, retained_total, weighted_retention.
+    Order by day_offset.
+  hints:
+    - "GROUP BY day_offset on fct_retention_cohorts."
+  reference_query: |
+    SELECT
+      day_offset,
+      SUM(cohort_size) AS cohort_size_total,
+      SUM(retained_users) AS retained_total,
+      ROUND(SUM(retained_users) * 1.0 / NULLIF(SUM(cohort_size), 0), 4)
+        AS weighted_retention
+    FROM analytics.fct_retention_cohorts
+    GROUP BY day_offset
+    ORDER BY day_offset
+  expected_value:
+    row_count_exact: 31

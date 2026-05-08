@@ -1,0 +1,235 @@
+# Case-study prompts. Each is a diagnostic or design scenario the user
+# should be able to talk through cold. Model answers are derived from the
+# three written analyses in docs/analyses/ and from the actual data shape.
+#
+# Structure: prompt → talking-point checklist (what an interviewer wants to
+# hear) → numbered narrative the user should be able to give cold → an
+# optional 'gotcha' the interviewer might press on.
+
+- id: arpdau_drop_diagnostic
+  category: diagnostic
+  prompt: |
+    Your warehouse shows ARPDAU dropped from $0.30 to $0.07 between Sep 25
+    and Sep 26. DAU is steady. Walk me through how you'd diagnose it.
+  talking_points:
+    - "Don't jump to conclusions — first verify the data isn't lying"
+    - "Decompose ARPDAU = total_revenue / DAU into ad and IAP components separately"
+    - "Check whether the drop is uniform or a few high-spending users disappearing"
+    - "Look at country / segment / device cohort splits"
+    - "Hypothesize: paywall change, ad mediation outage, store outage, payer-cohort churn"
+  narrative: |
+    Step 1 — validate. ARPDAU is heavy-tailed; check whether the prior week's
+    $0.30 was inflated by 1-2 whale-purchase days, not a steady baseline.
+    Pull the daily curve over the prior 30 days and look at the median, not
+    the mean.
+
+    Step 2 — decompose. ARPDAU = ad + IAP. Compute each separately for
+    Sep 25 vs Sep 26.
+    - If ad collapses but IAP holds → ad mediation outage, fill rate
+      crash, eCPM crash. Check ad_request count vs ad_impression count by
+      country tier.
+    - If IAP collapses but ad holds → payment funnel issue. Check IAP
+      count by hour; usually hits one specific country/store first.
+    - If both → infrastructure (event ingestion outage, dashboard bug).
+
+    Step 3 — segment. SUM of revenue by payer_segment. If the drop is
+    "whale segment went from $5,500 to $50," it's not a market issue; it's
+    that 1-3 whales stopped buying. Find them, look at their session
+    patterns the day before — uninstalls, refunds, soft-banned accounts.
+
+    Step 4 — confirm with a known signal. If hypothesizing "ad mediation
+    outage," check Soda's ad-fill-rate calibration check. If hypothesizing
+    "store outage," check synthetic_iap_events distinct_buyers vs prior
+    week.
+
+    Step 5 — recommend. Either ship a fix (ad config, store integration),
+    or if it's whale-cohort churn, escalate to live-ops for high-value
+    user retention outreach (per ADR-0013-tagged segment work).
+  gotcha: |
+    Don't say "the data looks weird, I'd ask the eng team." Hiring managers
+    want to see hypothesis-then-validate, not deflection. Always frame as
+    "here's what I'd check FIRST and what each result rules in or out."
+
+- id: d7_below_benchmark
+  category: design
+  prompt: |
+    Your D7 retention is 7.3%. Industry benchmark for casual puzzle is ~10%.
+    The team wants D7 closer to benchmark. What do you test?
+  talking_points:
+    - "Decompose: D7 is downstream of D1. Look at conditional retention"
+    - "D1 → D7 conditional retention may be strong even when raw D7 is weak"
+    - "Identify the leak point first, then design intervention there"
+    - "Push notification, tutorial change, daily reward — concrete A/B test designs"
+    - "Sample size math: how long does it take to read?"
+  narrative: |
+    First diagnose, don't jump to interventions. Pull the retention curve
+    weighted across cohorts. Compute conditional retention:
+      D1 → D7 = 7.3 / 13.4 = 54.5%.
+    That's actually STRONG (industry benchmark D1→D7 conditional is 30-40%).
+    Users who survive day 1 are stickier than average.
+
+    Translation: D7 weakness is a D1 problem in disguise. 86.6% of users
+    churn before D1; everything after is downstream. Improving D7 efficiently
+    means fixing D1.
+
+    Hypotheses (ranked by leverage):
+      1. No D1 push notification — most casual puzzle benchmarks rely on
+         a 24h push. Test: add one, 50/50 split.
+      2. First-session content density too low — early levels don't deliver
+         enough variety. Test: faster reward feedback in levels 1-3.
+      3. Difficulty curve front-loaded — check level_fail / level_start
+         in first session.
+      4. Geography mismatch — tier-1 markets sometimes have weak organic
+         D1 due to incidental installs. Check D1 by country.
+
+    Recommended test: 24h push notification, 50/50, MDE 4.6pp (D1 from
+    13.4% to 18%). At p1=0.134, p2=0.18, α=0.05, power=0.80:
+      n ≈ 1,250 per arm = 2,500 total installs.
+    At ~140 installs/day, ~18 days to read. Reasonable.
+
+    Read criterion: significant uplift in D1 alone is enough — D7 follows
+    per the conditional-retention math. Don't gate the decision on D7 (more
+    days to read = slower shipping). Failure mode to watch: cannibalized
+    D2 retention — push that just shifts return timing instead of creating
+    it.
+  gotcha: |
+    Don't propose a D7-specific intervention without first computing
+    conditional D1→D7 retention. If D1→D7 is already strong, D7-specific
+    interventions are wasted effort.
+
+- id: starter_pack_price_test
+  category: design
+  prompt: |
+    Product wants to test cutting starter_bundle from $19.99 to $9.99.
+    Design the experiment. How long do you need to run it?
+  talking_points:
+    - "Read on revenue per user, NOT conversion rate alone"
+    - "Sample-size math at the actual baseline conversion (0.40%)"
+    - "Cannibalization risk vs adjacent bundles"
+    - "Pre-register the analysis to avoid p-hacking"
+  narrative: |
+    Hypothesis: lowering starter_bundle from $19.99 to $9.99 lifts buyer
+    count enough to net more revenue, despite per-purchase revenue cut.
+
+    Treatment vs control: 50/50 random split on user_pseudo_id, deterministic
+    via FARM_FINGERPRINT for stable assignment. Eligibility window: first 7
+    days post-install.
+
+    Primary metric: REVENUE PER ELIGIBLE USER, not conversion rate. A 2x
+    conversion lift at half price = same revenue. Reading on conversion
+    declares victory while leaving total revenue flat.
+
+    Secondary metrics:
+      - starter_bundle conversion rate (sanity check)
+      - cannibalization on coins_xl_pack ($9.99) and mega_pack ($49.99)
+        — the price cut might pull demand SIDEWAYS instead of forward
+      - D7 retention in the test arm (cheaper starters might attract less-
+        committed converters who churn)
+
+    Sample size at baseline 0.40% conversion:
+      Optimistic (MDE 0.20pp, p2=0.60%): n ≈ 19,500/arm = 39,000 total
+      Realistic (MDE 0.30pp, p2=0.70%): n ≈ 9,500/arm = 19,000 total
+      Aggressive (MDE 0.40pp, p2=0.80%): n ≈ 5,900/arm = 12,000 total
+    At ~140 installs/day in this dataset: 3-9 months to read. Unviable for
+    optimistic; viable but slow for aggressive.
+
+    Recommendation: skip the price test. Run a bundle-CONTENT test instead
+    (same $19.99, 50% more in-game currency in treatment). Same
+    decision-making mechanic, no revenue dilution risk, fewer ambiguities
+    to read. If org insists on price testing, pre-register the analysis,
+    use the aggressive MDE, accept "no result" as a real outcome, and
+    budget 3 months.
+  gotcha: |
+    The right answer here is to push back on the test design itself. A
+    candidate who jumps straight into n calculation without questioning
+    "is this even readable in commercial timeframes" misses the binding
+    constraint. Volume, not statistics, is what kills small-game tests.
+
+- id: whale_concentration_jump
+  category: diagnostic
+  prompt: |
+    Whale-revenue share suddenly jumped from 68% to 88% over a week. Total
+    IAP revenue is roughly flat. Investigate.
+  talking_points:
+    - "Decompose: whale share is a ratio. Could move because numerator UP or denominator DOWN"
+    - "Total flat → numerator and denominator changed proportionally"
+    - "Likely explanation: dolphin/minnow segment churned but whales held"
+    - "Check segment counts and per-segment LTV"
+  narrative: |
+    Whale share = whale_revenue / total_revenue. If total is flat but ratio
+    grew, the non-whale segments shrank in absolute terms while whales
+    held. Distinct possibilities:
+      A) Dolphins/minnows stopped purchasing (cohort churn)
+      B) Dolphins/minnows REPRICED (e.g., a cheaper bundle attracted them
+         to lower spend) — but this would also typically lift conversion
+         rate, so check conversion alongside.
+      C) New whale joined whose spending compensated for non-whale
+         shrinkage (rare; would show in segment count change).
+
+    Actions:
+      1. Pull dim_players counts by segment WoW. Whale count steady,
+         dolphin/minnow count down → cohort churn.
+      2. Pull purchase counts (not revenue) by segment WoW. If purchases
+         halved on dolphin/minnow → behavioral change.
+      3. Check is_payer trend in dim_players: is paying conversion still
+         3% or did it dip?
+      4. If conversion dropped, ad-funnel problem (people not seeing
+         offers); if conversion held but segments shrank, whales got
+         absolutely better while non-whales got absolutely worse.
+
+    Live-ops implication: this is fragility, not strength. 88% whale share
+    means losing ONE whale costs a significant share of revenue. Per
+    Analysis 02's recommendation, the priority is whale retention
+    monitoring, not "great, our whales are great" framing.
+  gotcha: |
+    Don't celebrate a high whale share. It's a fragility signal. The
+    healthier the game, the more dolphins and minnows there are dampening
+    the dependence on the long tail.
+
+- id: project_walkthrough_prompt
+  category: walkthrough
+  prompt: |
+    Walk me through your project — what does it do, what's the architecture,
+    what's the most interesting decision you made?
+  talking_points:
+    - "Open with what + why, not how"
+    - "One-line architecture summary, then drill into one layer"
+    - "Pick ONE specific decision (ADR) — narrative beats list"
+    - "End with what's real vs what's synthetic — pre-empt the question"
+  narrative: |
+    The project is an end-to-end F2P monetization analytics build —
+    BigQuery as the warehouse, dbt for transformations, Dagster for
+    orchestration, Soda for data quality, Looker Studio for the dashboard.
+    It computes the canonical metrics — ARPDAU, ARPPU, LTV, retention,
+    conversion, whale concentration — against real GA4 puzzle-game data
+    plus calibrated synthetic ad-mediation and IAP layers.
+
+    Architecture: real Flood-It events read in place from the public
+    BigQuery dataset, plus synthetic generators for ad and IAP events
+    (because public data with that schema doesn't exist). Three dbt
+    staging views — one per source. Three marts: fct_revenue_daily,
+    dim_players, fct_retention_cohorts. Each metric in the glossary points
+    at its source-of-truth mart so an analyst always knows where a number
+    comes from.
+
+    Most interesting decision: the data acquisition one. Started with
+    "real Flood-It data + synthetic ad layer" because public ad-revenue
+    data doesn't exist. Then while building the model layer discovered
+    Flood-It only has 17 IAP events across 5 months — far too sparse to
+    compute ARPPU, LTV, conversion rate, or whale concentration honestly.
+    Had to amend the architectural decision (ADR-0013) to add a synthetic
+    IAP layer. Calibrated it to industry benchmarks — ~3% paying
+    conversion, log-normal LTV with percentile-based whale segmentation
+    that produces ~70% whale-revenue concentration. Every synthetic row
+    flagged is_synthetic=TRUE and the boundary is visible in every
+    downstream mart.
+
+    What's real: the BigQuery datasets, the dbt models, the data quality
+    stack (12 dbt tests + 30 Soda checks + Dagster scheduling), the
+    Looker Studio dashboard. What's synthetic: the ad-revenue and IAP
+    revenue numbers themselves, calibrated to industry-realistic shapes,
+    documented transparently in the ADRs.
+  gotcha: |
+    Don't open with the stack. Open with what the project DOES and why
+    that matters. Then when you mention BigQuery / dbt / Dagster, the
+    interviewer is grouping them into a story instead of cataloging tools.

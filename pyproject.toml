@@ -26,6 +26,13 @@ dependencies = [
     "pyarrow>=15.0",
     "google-cloud-bigquery>=3.20",
 
+    # Interview-prep study tool (scripts/study/) — Streamlit UI plus DuckDB
+    # for running SQL drills offline against a local Parquet snapshot of
+    # the BigQuery marts. Both runtime requirements; no transitive coverage.
+    "streamlit>=1.34",
+    "duckdb>=0.10",
+    "pyyaml>=6.0",
+
     # Orchestration project — installed editable so dagster dev can import
     # the package; its own dependencies (dagster, dagster-dbt, dagster-gcp,
     # dagster-gcp-pandas, dagster-webserver, dagster-dg-cli) are pulled in

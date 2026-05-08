@@ -201,3 +201,7 @@ cython_debug/
 # Synthetic-data outputs — regenerable from scripts/data/, not source.
 # Leading slash anchors to repo root so scripts/data/ (the generator code) stays tracked.
 /data/
+
+# Study tool — local DuckDB snapshot, Parquet exports, SRS state.
+# Regenerable by `uv run python scripts/study/setup_duckdb.py`.
+scripts/study/data/

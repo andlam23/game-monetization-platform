@@ -1,0 +1,436 @@
+# Flashcards for spaced-repetition recall.
+# Each card has a deck (for filtering), a prompt, an answer, and an optional
+# source pointer back to the canonical doc/file in the repo.
+
+- deck: metrics
+  prompt: "ARPDAU — definition and formula"
+  answer: |
+    Average Revenue Per Daily Active User. Day-level metric: per-active-user
+    revenue (ad + IAP combined) on a single calendar day.
+    Formula: SUM(total_revenue_usd) / COUNT(DISTINCT user_pseudo_id)
+    on a single event_date, both pulled from analytics.fct_revenue_daily.
+    Aggregate across days by averaging daily values, NEVER by recomputing on
+    a multi-day window (which would understate it).
+  source: docs/glossary.md
+
+- deck: metrics
+  prompt: "ARPPU — definition, formula, and what it deliberately excludes"
+  answer: |
+    Average Revenue Per Paying User. Total IAP revenue divided by the count
+    of distinct payers (users with ≥1 purchase across the data window).
+    Formula: SUM(total_iap_revenue_usd) / COUNT(*) over dim_players
+    filtered to is_payer = TRUE. Equivalent to AVG(ltv_usd) on the payer
+    cohort.
+    Excludes ad revenue by industry convention — ARPPU isolates spend from
+    the converted cohort, not aggregate revenue per converter.
+  source: docs/glossary.md
+
+- deck: metrics
+  prompt: "LTV — definition, formula, and the time-horizon caveat"
+  answer: |
+    Lifetime Value. Total cumulative revenue (ad + IAP) attributed to a
+    single user across the data window.
+    Formula: SUM(total_revenue_usd) per user_pseudo_id; materialized as
+    dim_players.ltv_usd.
+    Time horizon for this project is the actual Flood-It data range
+    (2018-08-01 → 2018-10-03, ~64 days). NOT a forecast and NOT truncated to
+    D7/D30/D90/D365. Switch to a windowed/forecasted variant when joining to
+    acquisition cost data for ROAS analysis.
+  source: docs/glossary.md
+
+- deck: metrics
+  prompt: "D1/D7/D30 retention — definition, exact-day vs rolling, day boundary"
+  answer: |
+    Exact-day cohort retention. Of users whose first session was on
+    cohort_date, the share who have at least one active Flood-It event on
+    cohort_date + N (where N = 1, 7, or 30).
+    Day boundaries: UTC calendar days (Flood-It only has country-grain geo;
+    no IANA timezone available for user-local-time retention).
+    EXACT-day, not rolling: D7 = "returned on day 7," not "active any day ≥ 7."
+    Right-censored: cohorts whose cohort_date + N exceeds the latest
+    available date are omitted entirely so retention is never deflated by
+    missing follow-up data.
+  source: docs/glossary.md
+
+- deck: metrics
+  prompt: "Conversion rate — formula and the 'paying / total' vs 'paying / new' choice"
+  answer: |
+    Paying conversion rate. Share of users who made ≥1 IAP purchase, out of
+    total user base. Formula: COUNTIF(is_payer) / COUNT(*) over dim_players.
+    This project uses 'paying / total', NOT 'paying / new' (paying-conversion-
+    of-new-cohort is computed separately when needed).
+  source: docs/glossary.md
+
+- deck: metrics
+  prompt: "Whale concentration — definition, formula, why it matters"
+  answer: |
+    Share of total IAP revenue from the top 10% of payers ('whales') by
+    lifetime spend.
+    Formula: SUM(IF payer_segment='whale', total_iap_revenue_usd, 0)) /
+             NULLIF(SUM(total_iap_revenue_usd), 0) over dim_players.
+    Industry: 80/20 rule says whales drive 70-80% of IAP revenue in healthy
+    F2P. This project's calibration target: 60-85%, achieved value 68.4%.
+    Why it matters: monetization analysts treat this as the primary
+    fragility signal. Higher = more dependent on a small number of users.
+  source: docs/glossary.md
+
+- deck: numbers
+  prompt: "Total revenue across the Flood-It window in this project"
+  answer: |
+    $8,716.02 across 2018-08-01 → 2018-10-03 (~64 days).
+    Components: $575.27 ad revenue (synthetic) + $8,140.75 IAP revenue
+    (synthetic). Real Flood-It IAPs: only 17 events total, dropped from
+    revenue computation per ADR-0013 amendment.
+
+- deck: numbers
+  prompt: "User counts: how many distinct users? how many payers? conversion rate?"
+  answer: |
+    9,559 distinct users in the data window.
+    274 payers (sampled at 3% of all users in the synthetic IAP layer).
+    Conversion rate: 2.87% (matches the calibrated 3% target within
+    sampling).
+
+- deck: numbers
+  prompt: "Retention curve actual values: D0 / D1 / D7 / D14 / D30"
+  answer: |
+    D0:  100%   (always; same-day activity by definition)
+    D1:   13.4% (industry casual-puzzle benchmark ~30% — BELOW)
+    D7:    7.3% (industry ~10% — slightly below)
+    D14:   7.3% (~6% — slightly above)
+    D30:   5.7% (~4% — ABOVE)
+    Pattern: leaky front door, sticky back door. D1 is the leverage point.
+
+- deck: numbers
+  prompt: "Whale revenue concentration: top 1% of all users drives what share?"
+  answer: |
+    Top 1% of all 9,559 users (96 people) drive 86.0% of total revenue.
+    Top 5%: 95.4% cumulative. Bottom 50%: 0.39%.
+    Average LTV in top 1%: $78.08; bottom 50%: $0.01.
+    More extreme than 80/20 — power law tighter than typical industry
+    averages because synthetic IAP layer was tuned to produce a long tail.
+
+- deck: numbers
+  prompt: "Synthetic event volumes: ad events? IAP events? sessions sampled?"
+  answer: |
+    Ad: 293,764 events (102,680 ad_request + 95,542 ad_impression + 95,542
+    ad_revenue) across 30,685 user-day sessions. Fill rate: 93.0%.
+    IAP: 1,325 purchases, $8,141 total revenue, 68.4% whale concentration
+    from 274 sampled payers.
+
+- deck: architecture
+  prompt: "Three dbt staging models — names and what they each stage from"
+  answer: |
+    stg_floodit__events       ← firebase-public-project.analytics_153293282.events_*
+                                (cross-project read-in-place; partition-filtered)
+    stg_synthetic_ads__events ← raw.synthetic_ad_events
+    stg_synthetic_iap__events ← raw.synthetic_iap_events
+    All three are views (per the project-level materialization config in
+    dbt_project.yml).
+
+- deck: architecture
+  prompt: "Three marts — names, grain, source-of-truth metrics"
+  answer: |
+    fct_revenue_daily         grain (event_date, user_pseudo_id);
+                              day-partitioned, clustered on user_pseudo_id.
+                              SoT for: ARPDAU.
+    dim_players               grain user_pseudo_id (unique).
+                              SoT for: ARPPU, LTV, conversion rate,
+                              whale concentration.
+    fct_retention_cohorts     grain (cohort_date, day_offset).
+                              SoT for: D1/D7/D30 retention.
+    All marts materialize as tables.
+
+- deck: architecture
+  prompt: "Why dbt staging-intermediate-marts (ADR-0012)? Layer responsibilities."
+  answer: |
+    staging:      view, source() only, light cleaning (rename/cast/filter)
+    intermediate: view or ephemeral, ref() to staging, reusable joins/aggs
+                  used by ≥2 marts
+    marts:        table or incremental, ref() to intermediate or staging,
+                  final consumer-facing shape
+    Naming: stg_<source>__<entity>, int_<entity>__<verb>, fct_/dim_ for
+    marts. Marts subdivided by domain: finance/, product/, marketing/.
+
+- deck: architecture
+  prompt: "Three-layer data quality stack (ADR-0005) — what runs where?"
+  answer: |
+    1. dbt tests (in-warehouse, structural):
+       uniqueness, not_null, accepted_values, relationships.
+       12 tests in this project, all on the marts.
+    2. Soda Core (cross-source, freshness, SLA contracts, distributional):
+       30 checks in soda/checks.yml. Asserts ADR-0013 calibration targets
+       (paying conversion 2-5%, whale share 60-85%).
+    3. Dagster sensors (anomaly detection on rolling baselines):
+       not yet built; would be domain-specific Python comparing metrics
+       to rolling baselines. Out of scope for v1.
+
+- deck: architecture
+  prompt: "Why BigQuery (ADR-0009) over Snowflake / Redshift / Databricks?"
+  answer: |
+    Permanent free tier (10 GB storage, 1 TB queries/month) is quota-
+    enforced, not billing-enforced. Snowflake's free trial is time-limited
+    (30 days); Redshift and Databricks have no equivalent permanent free
+    tier. dbt-bigquery and dagster-gcp are mature; Looker Studio integrates
+    natively. Trade-off: BigQuery 25% of JD share vs Snowflake 30% — slight
+    resume signal loss accepted for the permanent free-tier benefit.
+
+- deck: architecture
+  prompt: "Why Dagster (ADR-0008) over Airflow / Prefect / Mage?"
+  answer: |
+    Asset-first model fits monetization data work — each metric/table is a
+    declared asset with explicit dependencies, automatic lineage, observability.
+    First-class dbt integration via dagster-dbt (DbtProjectComponent pattern).
+    Airflow rejected as overkill for solo/small-team scale, dated DAG-centric
+    model. Prefect rejected because Dagster's asset model is more natural for
+    metrics-as-assets. Mage rejected for ecosystem maturity.
+
+- deck: architecture
+  prompt: "Why Soda Core (ADR-0005) over Great Expectations?"
+  answer: |
+    SodaCL (YAML-based check language) reads as documentation; diffs cleanly
+    in PRs; complements dbt tests rather than duplicating them. GX rejected
+    because: Python expectation objects read as code not contracts; GX
+    overlaps with dbt tests creating "where do I put this test" decision
+    fatigue; GX's v1 rewrite (2024) fragmented community.
+
+- deck: architecture
+  prompt: "Why Looker Studio (ADR-0006) over Tableau Public / Power BI free?"
+  answer: |
+    Tableau Public's hard constraint: every workbook is FORCED PUBLIC on the
+    Tableau Public profile. Breaks the moment any client work happens; forces
+    portfolio to mock-data-only.
+    Power BI free tier only natively supports Microsoft data sources;
+    BigQuery integration requires a Pro license.
+    Looker Studio: native BigQuery one-click connection, supports both private
+    and public reports, same family as enterprise Looker (the BI tool growing
+    fastest in modern-data-stack JDs). Trade-off: ~20% JD share vs Tableau ~40%.
+
+- deck: architecture
+  prompt: "Why Amplitude (ADR-0007) over GameAnalytics / Unity / Firebase?"
+  answer: |
+    Amplitude recognized across SaaS, e-commerce, fintech, AND gaming JDs —
+    one tool covers the 80% goal (gaming) plus the 20% fallback (cross-vertical).
+    GameAnalytics rejected as too gaming-niche. Unity Analytics only useful
+    inside Unity-built games. Firebase Analytics weaker on the analyst-facing
+    surface. deltaDNA — smaller ecosystem post-Unity acquisition.
+    Free tier: 10M events/month on Spark plan.
+
+- deck: data
+  prompt: "Data acquisition decision (ADR-0013): real backbone + synthetic supplement"
+  answer: |
+    Real backbone: GA4 Flood-It! sample at firebase-public-project.
+    analytics_153293282.events_*. Public, CC-BY 4.0, BigQuery-native.
+    Populated window: 2018-08-01 → 2018-10-03 (~64 days, ~3.2M events;
+    later daily-sharded tables exist but are empty).
+    Synthetic supplement: ad layer (because public ad-revenue data doesn't
+    exist row-level) + IAP layer (added after discovering Flood-It has only
+    17 in_app_purchase events — too sparse). Both calibrated to industry
+    benchmarks; both flagged is_synthetic=TRUE; both prefixed synthetic_.
+
+- deck: data
+  prompt: "Why a synthetic IAP layer was added mid-build (ADR-0013 amendment)"
+  answer: |
+    Discovered while starting Step 5.3 that Flood-It has only 17
+    in_app_purchase events across 5 months. Far too sparse to compute ARPPU,
+    LTV, conversion rate, or whale concentration honestly.
+    Without the supplement, four of the six canonical metrics named in
+    CLAUDE.md couldn't be demonstrated, defeating the project's stated
+    purpose. Added a calibrated synthetic IAP generator (scripts/data/
+    generate_synthetic_iap_events.py); ADR-0013 amended to capture the
+    discovery and amended scope.
+
+- deck: data
+  prompt: "Synthetic IAP calibration: paying conversion, LTV distribution, segment thresholds"
+  answer: |
+    Paying conversion: ~3% of all users sampled as payers (industry casual-
+    puzzle benchmark from GameAnalytics State of Mobile).
+    Per-payer LTV: log-normal(μ=ln 5, σ=2.0) → median ~$5, mean ~$37,
+    P90 ~$64, P99 ~$720. Heavy enough tail to produce 60-85% whale-revenue
+    concentration on the actual cohort size.
+    Segment thresholds: PERCENTILE-BASED, not fixed-dollar. Top 10% = whale,
+    next 30% = dolphin, bottom 60% = minnow. Defensible because industry
+    definitions vary ('top 10% of payers' vs '$100+ lifetime'); percentile
+    guarantees segment label matches what an analyst computes from the data.
+
+- deck: data
+  prompt: "Synthetic ad layer calibration anchors and event types"
+  answer: |
+    Three event types: ad_request (per-session cadence) → ad_impression
+    (only when fills, region-aware fill rate) → ad_revenue (impression ×
+    eCPM / 1000).
+    Calibration: AppLovin / ironSource / Unity LevelPlay public industry
+    reports. eCPM by placement and region tier (rewarded > interstitial >
+    banner; tier-1 > tier-2 > tier-3). Fill rate ~95-99% tier-1, ~88% tier-2,
+    ~72% tier-3. Cap of 12 requests per session.
+
+- deck: data
+  prompt: "The Flood-It schema quirk that broke the first session-id query"
+  answer: |
+    Flood-It is pre-GA4 (Firebase Analytics schema, 2018). event_params does
+    NOT contain ga_session_id (the GA4-standard key). The first version of
+    the synthetic-ad generator queried it and got 0 sessions back.
+    Fix: approximate a session as one user_pseudo_id × one event_date,
+    synthesize a deterministic 64-bit ga_session_id from
+    SHA1(user_pseudo_id|event_date)[:8]. For ARPDAU and per-day metrics
+    the user-day grain is the right one anyway.
+
+- deck: data
+  prompt: "BigQuery free-tier discipline: how does this project stay under quota?"
+  answer: |
+    Free tier: 10 GB storage, 1 TB queries/month. Cross-project queries
+    against firebase-public-project bill against MONETIZATION-WAREHOUSE's
+    quota (storage stays in the public project; bytes-scanned bills the
+    querying project).
+    Discipline:
+    - All Flood-It queries filter on _TABLE_SUFFIX so partition pruning kicks in
+    - Marts day-partitioned (fct_revenue_daily) so date-range queries scan
+      only the relevant shards
+    - Soda checks scoped to specific tables, not SELECT *
+
+- deck: setup-discoveries
+  prompt: "BigQuery service account permissions (ADR-0011) — three roles, why"
+  answer: |
+    bigquery.dataEditor — create/update/delete tables and views, write data
+    bigquery.jobUser   — submit query, load, and export jobs
+    bigquery.user      — list datasets, query INFORMATION_SCHEMA
+    Trade-off vs minimum (just dataEditor + jobUser): 'user' adds broader
+    read surface and metadata access dbt's docs / compile / ad-hoc analyst
+    queries benefit from. Marginal blast radius adding 'user' is small (no
+    write privileges; project-scoped).
+    Key path: ~/.gcp/dbt-creds.json (outside repo). Defensive .gitignore
+    patterns: **/*-creds.json, **/credentials*.json, **/service-account*.json.
+
+- deck: setup-discoveries
+  prompt: "What .gitignore pattern was used for credentials and why NOT blanket *.json?"
+  answer: |
+    Used: targeted patterns (**/*-creds.json, **/credentials*.json,
+    **/service-account*.json, .gcp/) rather than blanket *.json (which
+    SETUP.md initially recommended).
+    Reason: blanket *.json would ignore legitimate JSON config files — Claude
+    Code project settings, tsconfig if frontend added, dbt-generated artifacts.
+    The leak-prevention intent is satisfied more precisely by targeting
+    credential-shaped filenames.
+
+- deck: setup-discoveries
+  prompt: "Sentry wiring: where does sentry_sdk.init live? Why python-dotenv?"
+  answer: |
+    monetization_orchestration/src/monetization_orchestration/definitions.py
+    Top-of-module: load_dotenv(find_dotenv(usecwd=True)) — walks upward from
+    cwd to find the repo-root .env. Then sentry_sdk.init(dsn=os.environ.get(
+    'SENTRY_DSN', '')).
+    Why dotenv with upward search: dagster dev runs from
+    monetization_orchestration/ but the canonical .env lives at the repo root.
+    Without find_dotenv(usecwd=True), env vars wouldn't load and sentry_sdk
+    would silently disable itself.
+
+- deck: setup-discoveries
+  prompt: "claude-mem MCP Windows fix and why it has to be reapplied on upgrade"
+  answer: |
+    On Windows, Claude Code doesn't set CLAUDE_PLUGIN_ROOT for plugin MCP
+    spawns. Default sh wrapper resolves the script path via the env var;
+    when unset, Git Bash mangles the missing leading path component to
+    'C:\Program Files\Git\scripts\mcp-server.cjs' → MODULE_NOT_FOUND.
+    Fix: directly hardcode an absolute-path node invocation in the cached
+    .mcp.json at C:\Users\<you>\.claude\plugins\cache\thedotmack\claude-mem\
+    <VERSION>\.mcp.json. Path includes the version number, so re-apply
+    after every claude-mem upgrade.
+
+- deck: setup-discoveries
+  prompt: "Looker Studio gotchas — three of the AND/OR / In list / date / format ones"
+  answer: |
+    1. Filter clauses default to AND. day_offset = 0 AND = 1 AND = 7
+       returns 0 rows. Click 'AND' label to toggle to OR.
+    2. 'In list' operator only available for STRING fields, not numeric.
+       So for INT64 day_offset, must use OR-toggled equality clauses.
+    3. Default date range 'Auto' = Last 28 days RELATIVE TO TODAY. Against
+       static 2018 data, filters to ~nothing. Set Custom range explicitly.
+    4. Report-level date control overrides every tile's date range — set
+       its default to the static window or remove the control.
+    5. Y-axis currency formatting on time-series sometimes ignored on tick
+       labels even when field type is Currency. Fix via Style tab → Y-axis
+       → Number format → Currency.
+
+- deck: setup-discoveries
+  prompt: "SodaCL gotchas hit during the build (3 of them)"
+  answer: |
+    1. Date literals in bare check expressions don't parse:
+       `max(event_date) >= '2018-12-25'` errors. Use a fail query block
+       with the date inside SQL instead.
+    2. BigQuery's aggregation function is `countif`, not `count_if`. Soda
+       passes SQL through verbatim.
+    3. Multiple `checks for <table>:` blocks for the same table fail YAML
+       duplicate-key parsing. Consolidate per-table.
+
+- deck: setup-discoveries
+  prompt: "Why dagster-webserver and dagster-dg-cli are in main deps, not [dependency-groups] dev"
+  answer: |
+    create-dagster project's default scaffold puts both in dev. But:
+    dagster-webserver is required for `dagster dev` to launch the UI;
+    dagster-dg-cli is required for `dg check defs` and component scaffolding.
+    Both are runtime requirements in this project, not dev-only tooling.
+    Promoted to [project] dependencies in monetization_orchestration/
+    pyproject.toml so a fresh `uv sync` brings them in.
+
+- deck: setup-discoveries
+  prompt: "Pages root URL gotcha and the docs/index.html landing-page fix"
+  answer: |
+    GitHub Pages serving from /docs 404s at the bare repo URL
+    (https://<owner>.github.io/<repo>/) unless docs/index.html exists.
+    Subpaths like /dbt-docs/ work because that file exists; the root
+    doesn't get a default.
+    Fix: add a minimal docs/index.html with inline CSS, no Jekyll config
+    needed. Linked the live dashboard, the dbt-docs subpath, and the
+    GitHub repo. Used prefers-color-scheme so it reads well in either
+    browser theme.
+
+- deck: stack-versions
+  prompt: "Stack versions installed in this project"
+  answer: |
+    BigQuery free tier
+    dbt-core 1.11.9 + dbt-bigquery 1.11.1
+    Dagster 1.13.3 + dagster-dg-cli 1.13.3
+    Soda Core 3.5.6 + soda-core-bigquery
+    Python 3.12 (uv-managed)
+    bun 1.3.13 (for gstack browser binary)
+    sentry-sdk 2.59.0
+    google-cloud-bigquery-storage 2.38.0
+
+- deck: file-locations
+  prompt: "Where do these live? glossary, ADRs, analyses, dbt project, Dagster project, soda checks, synthetic generators"
+  answer: |
+    Glossary:           docs/glossary.md
+    ADRs:               docs/adr/0001-*.md … 0013-*.md (+ index README)
+    Analyses:           docs/analyses/01-*.md … 03-*.md (+ index README)
+    dbt project:        monetization_warehouse/
+    Dagster project:    monetization_orchestration/
+    Soda config+checks: soda/configuration.yml, soda/checks.yml
+    Synthetic gens:     scripts/data/generate_synthetic_ad_events.py
+                        scripts/data/generate_synthetic_iap_events.py
+    GCP setup script:   scripts/gcp/setup-bigquery.sh
+    Amplitude push:     scripts/data/push_events_to_amplitude.py
+    dbt docs HTML:      docs/dbt-docs/index.html (Pages-served)
+    Pages landing:      docs/index.html
+
+- deck: numbers
+  prompt: "Soda check counts and Dagster wiring location"
+  answer: |
+    30 Soda checks in soda/checks.yml across 5 tables (raw.synthetic_ad_events,
+    raw.synthetic_iap_events, analytics.fct_revenue_daily, analytics.dim_players,
+    analytics.fct_retention_cohorts).
+    All 30 PASS against the materialized warehouse.
+    Dagster wiring: monetization_orchestration/src/monetization_orchestration/
+    defs/soda_quality.py — soda_quality_scan asset + soda_quality_job +
+    soda_quality_daily ScheduleDefinition (cron 0 6 * * *).
+
+- deck: numbers
+  prompt: "dbt test counts and what they test"
+  answer: |
+    12 dbt tests in _<domain>__models.yml files.
+    dim_players:
+      - unique + not_null on user_pseudo_id
+      - not_null on ltv_usd, is_payer, payer_segment
+      - accepted_values on payer_segment ('whale','dolphin','minnow','non_payer')
+    fct_revenue_daily: not_null on event_date, user_pseudo_id, total_revenue_usd,
+      is_active_today, is_paying_today
+    fct_retention_cohorts: not_null on cohort_date, day_offset, cohort_size,
+      retention_rate
