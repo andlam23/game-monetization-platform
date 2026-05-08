@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>game-monetization-platform</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      max-width: 720px;
+      margin: 4rem auto;
+      padding: 0 1.25rem;
+      line-height: 1.55;
+    }
+    h1 { margin-bottom: 0.25rem; font-size: 1.6rem; }
+    .tagline { color: #666; margin-top: 0; margin-bottom: 2rem; }
+    ul { padding-left: 1.25rem; }
+    li { margin-bottom: 0.5rem; }
+    a { color: #0366d6; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { background: rgba(127,127,127,0.15); padding: 0 0.25rem; border-radius: 3px; font-size: 0.9em; }
+    .meta { margin-top: 2.5rem; font-size: 0.9rem; color: #888; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0d1117; color: #c9d1d9; }
+      .tagline { color: #8b949e; }
+      a { color: #58a6ff; }
+      .meta { color: #6e7681; }
+    }
+  </style>
+</head>
+<body>
+  <h1>game-monetization-platform</h1>
+  <p class="tagline">End-to-end F2P monetization analytics on real GA4 data — BigQuery, dbt, Dagster, Soda, Looker Studio.</p>
+
+  <ul>
+    <li><a href="https://datastudio.google.com/reporting/dca0554f-5906-4c2d-8576-e5c4f922c3cb"><strong>Live dashboard</strong></a> — six tiles on the dbt marts (Looker Studio)</li>
+    <li><a href="./dbt-docs/"><strong>dbt docs site</strong></a> — model lineage graph, column docs, test coverage</li>
+    <li><a href="https://github.com/andlam23/game-monetization-platform"><strong>Source on GitHub</strong></a> — README, ADRs, glossary, analyses, SETUP runbook</li>
+  </ul>
+
+  <p class="meta">
+    Real F2P puzzle-game data from the GA4 Flood-It! BigQuery sample (Aug-Oct 2018) plus calibrated synthetic ad-mediation and IAP layers (per
+    <a href="https://github.com/andlam23/game-monetization-platform/blob/main/docs/adr/0013-data-acquisition.md">ADR-0013</a>).
+  </p>
+</body>
+</html>
