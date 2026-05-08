@@ -104,4 +104,8 @@ Three writeups demonstrating analytical thinking against the warehouse:
 
 ## Status
 
-End-to-end pipeline live: BigQuery datasets, three staging models, three marts, 30 Soda checks scheduled in Dagster (cron `0 6 * * *`), Looker Studio dashboard published, 500 events ingested into Amplitude for funnel/retention demos. Six canonical metrics encoded with glossary entries; data quality validated at three layers (dbt tests + Soda + Dagster). See `docs/SETUP.md` for the per-step state.
+End-to-end pipeline live: BigQuery datasets, three staging models, three marts, 30 Soda checks scheduled in Dagster (cron `0 6 * * *`, verified passing end-to-end as a `dagster asset materialize` run), Looker Studio dashboard published, 500 events ingested into Amplitude for funnel/retention demos. Six canonical metrics encoded with glossary entries.
+
+**Data quality**: every refresh of the marts is gated by three layers ([ADR-0005](docs/adr/0005-data-quality-tool.md)) — 12 dbt tests on structural invariants, 30 Soda checks on freshness / row-count SLAs / distributional calibration ([`soda/checks.yml`](soda/checks.yml)), and a Dagster-scheduled `soda_quality_scan` asset that fails the run if any check fails ([`monetization_orchestration/.../defs/soda_quality.py`](monetization_orchestration/src/monetization_orchestration/defs/soda_quality.py)). Live status surfaces in the Dagster UI, not the BI dashboard — quality monitoring belongs at the operations layer, not the consumer-facing one.
+
+See `docs/SETUP.md` for the per-step state.
