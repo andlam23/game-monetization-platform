@@ -31,9 +31,9 @@ The foundational text on F2P monetization math — LTV, payer conversion, whale 
 - Author profile: <https://mobiledevmemo.com/about/>
 - About a week's evening reading. Take notes — the formulas reappear in interviews.
 
-### Step A.2: Subscribe to the four newsletters that matter
+### Step A.2: Subscribe to the three newsletters that matter
 
-These are the ones currently working analysts and operators actually read in 2026:
+These are the ones currently working analysts and operators actually read in 2026, scoped to mobile F2P (the target vertical for this project's portfolio):
 
 1. **Mobile Dev Memo** (Eric Seufert) — free weekly newsletter at <https://mobiledevmemo.com>. Independent analysis of mobile, ad tech, and monetization. Sharpest single voice in the space. Also has a paid tier (MDM Pro) and a private Slack. Free version is enough to start.
 
@@ -41,9 +41,9 @@ These are the ones currently working analysts and operators actually read in 202
 
 3. **Deconstructor of Fun** (Michail Katkoff and team) — newsletter + podcast for games professionals. Multiple hosts, weekly cadence, very tactical (what worked, what didn't, what the data shows). <https://www.deconstructoroffun.com> and find "Deconstructor of Fun" on Apple Podcasts / Spotify.
 
-4. **GameDiscoverCo** (Simon Carless) — Steam and PC market intelligence specifically. If your interest extends beyond mobile F2P into PC/console live service, this is the source. Free newsletter at <https://newsletter.gamediscoverable.com>.
-
 Set aside 30 minutes Monday morning for the week's issues. **Take notes on terminology you don't recognize** — that's your homework list.
+
+> **Why no PC/console newsletter?** GameDiscoverCo (Simon Carless) is the canonical PC/Steam-intelligence source, but the entry-level monetization-analyst job density is overwhelmingly mobile F2P (Scopely, Playrix, Jam City, Wooga, King, Zynga, smaller indie/mid-tier). PC/console live-service roles are smaller in number, more competitive, and often want shipped-game experience. Don't burn calories on PC vocabulary until / unless your target shifts.
 
 ### Step A.3: Listen to the two podcasts that sharpen monetization thinking
 
