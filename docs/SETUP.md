@@ -773,6 +773,40 @@ Root README with:
 
 Pin it on your GitHub profile.
 
+### Step 6.3: Publish the dbt docs site
+
+dbt's `docs generate` produces lineage graphs, column-level documentation, source freshness, and test coverage as a hostable HTML site. Single most-impressive recruiter artifact past the dashboard, since it makes the model graph visually inspectable.
+
+**Generate as a single self-contained file**:
+
+```sh
+cd monetization_warehouse
+dbt docs generate --static
+cp target/static_index.html ../docs/dbt-docs/index.html
+```
+
+`--static` inlines the manifest and catalog into the HTML so no sibling JSON files are needed at runtime — one ~2.5MB file, deploys anywhere static.
+
+**Enable GitHub Pages** (programmatic via `gh`, no web UI clicking):
+
+```sh
+gh api -X POST repos/<owner>/<repo>/pages --input - <<'EOF'
+{"source":{"branch":"main","path":"/docs"}}
+EOF
+```
+
+The first build kicks off on the commit that pushes `docs/dbt-docs/index.html`. Poll for completion:
+
+```sh
+gh api repos/<owner>/<repo>/pages/builds/latest --jq .status
+```
+
+Status goes `building` → `built` in ~30-60s.
+
+**Live URL**: `https://<owner>.github.io/<repo>/dbt-docs/`. Add it to the README's Documentation section.
+
+**Regeneration cadence**: manual on each model change (no GitHub Action wired — overkill for a static portfolio with infrequent updates). Just rerun the `generate --static` + `cp` pair and push.
+
 ---
 
 ## Final checklist
