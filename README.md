@@ -20,6 +20,14 @@ ARPDAU, D0–D30 retention curve with industry benchmark lines, paying conversio
 | Product analytics | Amplitude |
 | Observability | Sentry |
 
+## Analyses
+
+Three writeups demonstrating analytical thinking against the warehouse:
+
+1. [Retention curve health and D7 improvement priorities](docs/analyses/01-retention-curve-and-d7-improvements.md) — leaky front door, sticky back door
+2. [Revenue concentration and live-ops priorities](docs/analyses/02-revenue-concentration-and-live-ops-priorities.md) — top 1% of users drive 86% of revenue
+3. [Starter pack price-test design](docs/analyses/03-starter-pack-price-test-design.md) — sample-size math at 0.40% baseline conversion
+
 ## Documentation
 
 - **[docs/glossary.md](docs/glossary.md)** — canonical metric definitions (ARPDAU, ARPPU, LTV, D1/D7/D30 retention, conversion rate, whale concentration), each pointing at its source-of-truth dbt mart
