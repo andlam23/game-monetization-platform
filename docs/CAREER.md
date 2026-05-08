@@ -77,17 +77,33 @@ This serves three purposes: it forces you to internalize the data, it generates 
 
 You cannot interview for a monetization role without playing F2P games critically. This isn't entertainment time; it's research.
 
-### Step B.1: Pick your five games
+### Step B.1: Pick your six games
 
-Aim for diversity across genre and monetization model:
+Six teardowns, structured as a partial-hedge: **three current genre leaders** (so you've studied what every monetization analyst benchmarks against) plus **three LA-studio picks** (since LA is the target geography — Scopely, Activision Mobile / King Santa Monica, Jam City, Riot, PlayStudios, Light & Wonder, Gameloft's LA office). Going 100% LA-only would mean teardowns of weaker titles in some categories, which dilutes analytical depth; going 100% genre-leader would miss the chance to signal targeted research on LA employers from their seat.
 
-1. **A top-grossing match-3** (Royal Match, Candy Crush, Match Masters) — for energy systems and IAP pacing.
-2. **A 4X / strategy** (Last War: Survival, Whiteout Survival, Top Heroes) — for whale concentration and battle pass mechanics.
-3. **A merge or puzzle** (Travel Town, Merge Mansion) — for narrative-driven retention and event design.
-4. **An RPG / gacha** (Genshin Impact, Honkai: Star Rail, Reverse: 1999) — for gacha psychology and pity systems.
-5. **A live-service shooter or hypercasual breakout** — for offers, season passes, and ad monetization.
+Picks as of May 2026:
 
-The current top-grossing list is on Mobile Dev Memo's homepage at <https://mobiledevmemo.com> and updates 3x daily.
+1. **Match-3 → Royal Match** (Dream Games, Istanbul — *non-LA, genre leader*).
+   ~$1.3B in 2025; #1 grossing puzzle globally. The "no ads, ever" + bundle-pricing wedge and Royal Pass cadence are the canonical match-3 teardown — every match-3 PM in the industry benchmarks against this.
+
+2. **4X / strategy → Last War: Survival** (FirstFun, Hong Kong — *non-LA, genre leader*).
+   #1 4X by IAP for 5 consecutive quarters; ~$117M/month. The hybrid-casual UA "pull the pin" creative vs. actual 4X core loop, plus the soft-gacha hero collection (shard pulls, dupe-fusion power curves), is the 4X mechanic to understand right now.
+
+3. **Merge → Gossip Harbor: Merge & Story** (Microfun, China — *non-LA, genre leader*).
+   Dethroned Travel Town and Merge Mansion at end of 2024; current top-grossing merge title; >$100M H1 2025. The narrative-meta-on-top-of-merge structure (story unlocks gated by energy/star economy) is the active 2026 case study Naavik / Deconstructor of Fun cover.
+
+4. **RPG / gacha → MARVEL Strike Force** (Scopely, Culver City — *LA*).
+   Top-grossing hero-collection RPG, monetization-rich (gacha + bundles + battle pass + Alliance war live-ops). LA-studio relevance: Scopely is one of the largest F2P mobile employers in the area and a primary target. Trade-off vs. picking Wuthering Waves or Genshin: less freshness on the gacha-banner story, but direct alignment with the Scopely portfolio.
+
+5. **Live-service shooter → Call of Duty Mobile** (Activision Mobile, Santa Monica — *LA-relevant*).
+   Top-grossing AAA shooter F2P. Activision has significant Santa Monica presence. Battle Pass + bundle store + Weapon Blueprints + seasonal events. Trade-off vs. picking Brawl Stars: less monetization-mechanic freshness (Brawl Stars' Starr Drops are a richer case), gains the "AAA shooter F2P" framing that's directly relevant to Activision / King and adjacent LA studios.
+
+6. **Casual / social hybrid → Monopoly GO** (Scopely, Culver City — *LA + genre leader*).
+   Top-grossing globally; unique monetization profile (board-game-meets-slot-machine social hybrid with friend-pressure mechanics). Doubles as LA-studio relevance AND a current top-grossing case. Tear down the dice-economy / social-leaderboard / partner-event design — distinctly different from the other five.
+
+The current top-grossing list lives on Mobile Dev Memo's homepage at <https://mobiledevmemo.com> (updates 3x daily) and Sensor Tower / AppMagic dashboards. Re-check ranks before starting each teardown — the leader board moves.
+
+> **Why a non-LA game still belongs in this list**: when you interview at Scopely or Activision, the hiring manager wants to know you can articulate what *Royal Match* does well and what your LA-studio's title does differently. Skipping the genre leaders to keep the list LA-pure would read as narrow market knowledge.
 
 ### Step B.2: Set up a critical play notebook
 
@@ -103,9 +119,9 @@ Make a `docs/teardowns/` folder in your repo. For each game, take screenshots an
 
 Play each game for at least a week. Spend a small amount in one of them ($5-10 in a single IAP) so you understand what the post-purchase flow looks like — that's where most analysts who haven't paid get blindsided in interviews.
 
-### Step B.3: Write five teardowns
+### Step B.3: Write six teardowns
 
-One per game. Format as a Diataxis "explanation" doc — discursive, captures the *why* behind the design choices. Each ~1500-2500 words. Structure:
+One per game. Format as a Diataxis "explanation" doc — discursive, captures the *why* behind the design choices. Each ~1500-2500 words. For the LA-studio picks (MARVEL Strike Force, Call of Duty Mobile, Monopoly GO), explicitly note the studio + LA office in the teardown's header — it makes the targeting visible to a recruiter scanning the folder. Structure:
 
 1. **The pitch** — what does this game think it's selling? Who to?
 2. **The economy** — soft currency, hard currency, premium currency, sinks, faucets. Diagram if you can.
@@ -129,7 +145,7 @@ Spend 90 minutes once on these:
 
 - **Headline**: not "Aspiring Data Analyst" — instead "Building open-source monetization analytics tooling | dbt + Dagster + BigQuery | F2P retention & LTV". Specific signals.
 - **About**: 3-5 sentences explaining what you're building and why. Link to the public repo. Mention the analyses (when written).
-- **Featured section**: pin the repo, the live Looker Studio dashboard, your three analyses, your five teardowns.
+- **Featured section**: pin the repo, the live Looker Studio dashboard, your three analyses, your six teardowns.
 - **Skills**: SQL, Python, dbt, Dagster, BigQuery, Amplitude, A/B Testing, Cohort Analysis, Data Visualization, Soda, Sentry. Not LinkedIn's auto-suggestions.
 
 A current and well-cited guide on LinkedIn optimization for data roles: search "LinkedIn data analyst profile 2026" — the patterns change yearly. The framework above is durable.
@@ -174,7 +190,7 @@ A monetization analyst resume is structurally different from a generic data anal
 1. **Headline** — same shape as your LinkedIn headline.
 2. **Summary** — 3 lines. What you build, what you can do, what you're looking for.
 3. **Featured Project** — your repo. Bullet points on stack (BigQuery, dbt, Dagster, Soda, Looker Studio, Amplitude), KPIs analyzed (ARPDAU, LTV, retention cohorts), and **measurable outcomes** ("identified $X opportunity in Y cohort," even on synthetic data). Link the repo and the dashboard.
-4. **Analyses** — your three SETUP.md analyses + your five teardowns, with one-line descriptions and links.
+4. **Analyses** — your three SETUP.md analyses + your six teardowns, with one-line descriptions and links.
 5. **Other work** — whatever your prior background is, framed in terms of analytical/engineering rigor.
 6. **Skills** — same list as LinkedIn skills.
 7. **Education / certifications** — bottom.
