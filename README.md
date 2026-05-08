@@ -96,9 +96,11 @@ Three writeups demonstrating analytical thinking against the warehouse:
 
 ## Documentation
 
+- **[Live dbt docs site →](https://andlam23.github.io/game-monetization-platform/dbt-docs/)** — generated lineage graph with column-level documentation, source freshness, and test coverage. Static HTML at [`docs/dbt-docs/index.html`](docs/dbt-docs/index.html). Regenerate with `cd monetization_warehouse && dbt docs generate --static && cp target/static_index.html ../docs/dbt-docs/index.html`.
 - **[docs/glossary.md](docs/glossary.md)** — canonical metric definitions (ARPDAU, ARPPU, LTV, D1/D7/D30 retention, conversion rate, whale concentration), each pointing at its source-of-truth dbt mart
 - **[docs/adr/](docs/adr/)** — 13 architecture decision records covering every constraining choice
 - **[docs/SETUP.md](docs/SETUP.md)** — the executable build runbook
+- **[docs/analyses/](docs/analyses/)** — three analytical writeups against the warehouse
 - **[docs/CAREER.md](docs/CAREER.md)** — parallel job-search track
 - **[docs/WORKFLOW.md](docs/WORKFLOW.md)** — human/agent collaboration loop
 
