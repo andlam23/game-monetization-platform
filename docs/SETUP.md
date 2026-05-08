@@ -708,7 +708,41 @@ Walkthrough (introductory, not the level of detail above): <https://blog.coupler
 
 ### Step 5.6: Push events to Amplitude
 
-Send a sample of your events to Amplitude's HTTP API. A few hundred is enough to play with funnel and retention views and speak to it in interviews.
+Push a sample of warehouse events to Amplitude's HTTP API v2 batch endpoint so the funnel, retention, and segment views in Amplitude's UI run against the same events the dbt marts compute. A few hundred events across diverse types is enough — the goal is being able to *demonstrate* Amplitude fluency, not load the whole pipeline.
+
+Loader at `scripts/data/push_events_to_amplitude.py`:
+
+```sh
+uv run python scripts/data/push_events_to_amplitude.py --user-sample 50 --max-events 500
+```
+
+**Sampling strategy that matters**: stratify the user sample, don't pure-random. With ~3% paying conversion, 50 random users produces 1-2 payers — not enough to demo IAP funnels in Amplitude. The loader splits the sample 50/50 between payers and random users, ensuring conversion behavior in the payload. Confirmed at run time:
+
+```
+payload event-type distribution:
+  ad_impression  : 208
+  session_start  : 117
+  level_start    : 65
+  iap_purchase   : 60   ← matters for funnel demo
+  level_complete : 40
+  first_open     : 5
+  level_fail     : 5
+
+Amplitude responded HTTP 200: events_ingested: 500
+```
+
+**Schema mapping** to Amplitude HTTP API v2:
+
+- `user_id` ← Flood-It `user_pseudo_id`
+- `event_type` ← BigQuery `event_name`
+- `time` ← `event_timestamp_us / 1000` (Amplitude wants Unix milliseconds, our column is microseconds — easy to forget)
+- `event_properties` ← `placement`, `revenue_usd`, `product_id`
+- `user_properties` ← `country`, `payer_segment`
+- `insert_id` ← `user_pseudo_id-event_timestamp_us` (idempotency key; lets you re-run the script without duplicating events in Amplitude)
+
+**Verify in Amplitude**: open <https://app.amplitude.com> → your project → Events tab. New events typically appear within ~30 seconds. Build one quick funnel: `session_start` → `level_complete` → `iap_purchase` to demonstrate end-to-end conversion analysis.
+
+Reference: <https://amplitude.com/docs/apis/analytics/http-v2>
 
 ---
 
